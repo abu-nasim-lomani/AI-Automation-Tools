@@ -1,0 +1,14 @@
+# Byte stability is a requirement here, not a preference.
+# The four frozen specifications are verified by SHA-256 (CLAUDE.md §0, and the
+# hashes recorded during the Stage 0 amendment pass). Letting Git rewrite line
+# endings on checkout would change those bytes and invalidate every recorded
+# hash, so line endings are pinned to LF in both the index and the working tree
+# on every platform.
+* text=auto eol=lf
+
+# Explicit for the specifications, so a future change to the global rule cannot
+# silently affect them.
+*.md text eol=lf
+*.sql text eol=lf
+*.ts text eol=lf
+*.json text eol=lf

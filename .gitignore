@@ -1,0 +1,42 @@
+# ── Secrets: never commit ────────────────────────────────────────────────────
+# CLAUDE.md §1.8 / SECURITY.md §6. .env.example (names only, empty values) is
+# the one exception and is explicitly re-included below.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+secrets/
+service-role*
+master-key*
+
+# Supabase local state and linked-project credentials
+supabase/.temp/
+supabase/.branches/
+.supabase/
+
+# ── Backups and dumps (may contain tenant data and ciphertext) ───────────────
+*.dump
+*.sql.gz
+*.tar.gz
+backups/
+pg_dump*
+
+# ── Dependencies and build output ────────────────────────────────────────────
+node_modules/
+dist/
+build/
+out/
+.next/
+coverage/
+*.tsbuildinfo
+
+# ── Tooling and OS noise ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.log
+npm-debug.log*
+.idea/
