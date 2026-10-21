@@ -1,0 +1,56 @@
+name: Tests
+
+# Holds NO credentials, deliberately. Every assertion runs against a throwaway
+# PostgreSQL container created inside the runner, so this workflow is safe on a
+# pull request from a fork: there is nothing here to steal, which is why it
+# carries none of the `if: head.repo == github.repository` guard the dry-run
+# workflow needs. If a step ever needs a secret, it belongs in its own
+# workflow, not in this one.
+#
+# This is what turns the "Enforced by" column of CLAUDE.md §2 into something
+# real rather than aspirational: R1, R11 and R12 are asserted on every change.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  database:
+    # Pinned rather than ubuntu-latest: the same commit must not change
+    # behaviour because GitHub moved the label to a new image.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same script a developer runs locally, unmodified, so CI and a
+      # working copy cannot drift apart. PostgreSQL 15 deliberately: the floor
+      # the migrations claim to support.
+      #
+      # --mutate additionally removes each control in turn and requires that
+      # exactly its own suite then breaks. A control that can be deleted
+      # without any test noticing is not a control.
+      - name: Database suites and mutation verification
+        run: bash supabase/tests/run.sh --mutate
+
+  crypto:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to the version the suite is proven against. The tests are
+          # WebCrypto-only and run unchanged on Deno, which is what the Edge
+          # Functions will use.
+          node-version: 24.15.0
+
+      - name: Envelope encryption tests
+        run: node --experimental-strip-types --test packages/core/crypto/envelope.test.ts

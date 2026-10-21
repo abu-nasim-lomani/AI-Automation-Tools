@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Gate 3. Configure a required reviewer on this Environment in
     # Settings > Environments > development, and scope the deploy secrets to
