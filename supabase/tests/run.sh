@@ -53,7 +53,10 @@ echo "== applying migrations and seeding"
 rebuild
 echo "== running suites"
 run_suites
-$PSQL < supabase/tests/harness/99_report.sql
+# ON_ERROR_STOP matters here: 99_report.sql raises an exception when an
+# assertion failed, and without this flag psql exits 0 regardless, so a
+# red suite would report green. Verified: exit 0 without it, 3 with it.
+$PSQL -v ON_ERROR_STOP=1 < supabase/tests/harness/99_report.sql
 
 if [[ "${1:-}" == "--mutate" ]]; then
   echo
