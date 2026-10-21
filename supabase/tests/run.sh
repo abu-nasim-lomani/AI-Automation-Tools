@@ -30,9 +30,9 @@ if ! docker ps --format '{{.Names}}' | grep -qx "$C"; then
 fi
 
 HARNESS=(supabase/tests/harness/00_auth_shim.sql
-         supabase/migrations/0001_schema.sql
-         supabase/migrations/0002_privileges_and_rls.sql
-         supabase/migrations/0003_triggers.sql
+         supabase/migrations/20261020230100_schema.sql
+         supabase/migrations/20261020230200_privileges_and_rls.sql
+         supabase/migrations/20261020230300_triggers.sql
          supabase/tests/harness/10_assert.sql
          supabase/tests/harness/20_seed.sql)
 SUITES=(supabase/tests/suites/sec_01_cross_tenant.sql
