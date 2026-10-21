@@ -40,21 +40,24 @@ jobs:
 
       - name: Verify the target project before linking
         env:
-          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           if [ -z "${PROJECT_REF:-}" ]; then
-            echo "::error::Repository variable SUPABASE_PROJECT_REF is not set."
+            echo "::error::Secret SUPABASE_PROJECT_REF is not set."
             exit 1
           fi
-          # Fingerprint only. The full ref is never printed, because this
+          # Fingerprint only. The ref is stored as a SECRET rather than a
+          # variable so GitHub masks it wherever it surfaces -- including inside
+          # Supabase CLI error text. A 4-character fingerprint is too short to
+          # be masked, so it still prints, which is the point. This
           # repository is public and its logs are world-readable.
           echo "Target fingerprint: ${PROJECT_REF:0:4}...${PROJECT_REF: -4}"
 
       - name: Link to the development project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: supabase link --project-ref "$PROJECT_REF"
 
       - name: Dry run — read-only, applies nothing

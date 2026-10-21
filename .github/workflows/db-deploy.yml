@@ -60,11 +60,11 @@ jobs:
 
       - name: Gate 4 — verify the target project BEFORE linking
         env:
-          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
           set -euo pipefail
           if [ -z "${PROJECT_REF:-}" ]; then
-            echo "::error::Repository variable SUPABASE_PROJECT_REF is not set."
+            echo "::error::Secret SUPABASE_PROJECT_REF is not set."
             exit 1
           fi
           # No production project exists in this configuration and no production
@@ -76,7 +76,7 @@ jobs:
       - name: Link to the development project
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: supabase link --project-ref "$PROJECT_REF"
 
       - name: Record what would be applied (always runs first)
