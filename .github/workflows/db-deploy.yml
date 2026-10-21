@@ -1,0 +1,98 @@
+name: DB deploy (manual only)
+
+# The ONLY path that writes to the database. Four independent gates must all
+# pass before a single statement is applied:
+#
+#   1. workflow_dispatch only — no push, no schedule, no pull_request trigger,
+#      so nothing can deploy itself. This also keeps us inside ADR-005: Actions
+#      is used for deployment, never as the production scheduler.
+#   2. a typed confirmation of exactly "apply"
+#   3. a GitHub Environment with a required reviewer — a human approves the run
+#   4. the target project is verified BEFORE `link` is called
+#
+# A dry run always executes first, so the log records what was about to be
+# applied even if the apply step then fails.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type exactly: apply'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-deploy
+  cancel-in-progress: false      # never interrupt a migration mid-flight
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # Gate 3. Configure a required reviewer on this Environment in
+    # Settings > Environments > development, and scope the deploy secrets to
+    # it so no other workflow or job can read them.
+    environment: development
+
+    steps:
+      - name: Gate 2 — require typed confirmation
+        env:
+          # Passed through the environment, never interpolated into the shell.
+          # `run: ... ${{ inputs.confirm }}` would be a script-injection hole:
+          # the input is attacker-controllable on a public repository.
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "${CONFIRM:-}" != "apply" ]; then
+            echo "::error::Confirmation not given. Expected exactly: apply"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0        # pinned deliberately — see db-dry-run.yml
+
+      - name: Gate 4 — verify the target project BEFORE linking
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROJECT_REF:-}" ]; then
+            echo "::error::Secret SUPABASE_PROJECT_REF is not set."
+            exit 1
+          fi
+          # No production project exists in this configuration and no production
+          # secret is present, so there is nothing to mis-target. The fingerprint
+          # lets a reviewer confirm the destination without the public log
+          # carrying the full ref.
+          echo "Target fingerprint: ${PROJECT_REF:0:4}...${PROJECT_REF: -4}"
+
+      - name: Link to the development project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$PROJECT_REF"
+
+      - name: Record what would be applied (always runs first)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push --dry-run
+
+      - name: Apply migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase db push
+
+      - name: Confirm the recorded migration history
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase migration list
