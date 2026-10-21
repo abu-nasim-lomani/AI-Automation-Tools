@@ -479,6 +479,70 @@ derived in-database too.
 
 ---
 
+### ADR-015 — pg_net's request queue is readable by PUBLIC, and cannot be closed
+**Context.** The job engine reaches an Edge Function by having `pg_cron` call `pg_net`, which queues
+the request in `net.http_request_queue` for a background worker to send. Measured on the hosted
+development project `[V] 2026-10-22`: PUBLIC holds `arwdDxtm` — insert, select, update, delete,
+truncate, references, trigger, maintain — on `net.http_request_queue` and `net._http_response`, and
+`rwU` on the queue's sequence; `anon` and `authenticated` additionally hold `USAGE` on the schema.
+The vendor documents this as object-level access "for example, `SELECT`"; it is the full set.
+**Options.** (A) revoke the grants in a migration; (B) accept them and constrain what may travel
+through the queue; (C) abandon `pg_net` and drive the clock from the Cloudflare Worker of ADR-003.
+**Decision.** **(B).** `[D]` (A) was attempted in migration `20261022203000` and does nothing:
+every grant carries `/supabase_admin`, PostgreSQL lets a role revoke only grants it made itself or
+reaches as owner or superuser, and migrations run as `postgres`, where
+`pg_has_role(current_user,'supabase_admin','member')` is `false` `[V] 2026-10-22`. A revoke matching
+no grant the caller made is not an error — it succeeds silently, which is why that migration
+reported success. `20261022213000` records the correction forward, because R10 forbids editing a
+merged migration.
+**Consequences.** Two constraints bind anything built on `pg_net`. First, **no secret may travel in
+a request header**: the queue row holds the header and the queue is readable. An Edge Function
+invoked this way authenticates its caller some other way. Second, **a direct insert into the queue
+reaches the network without passing through job code**, so R9's kill switch cannot cover that path;
+the switch remains correct for every path the application controls, which today is every path that
+exists.
+**How large this is.** Smaller than it first appears, and latent rather than live. A PUBLIC grant
+only reaches a role that can log in; `anon`, `authenticated` and `service_role` are `NOLOGIN`, and
+whoever holds the `postgres` password already controls the database, so the queue is no escalation
+for them. The exposure is that any login-capable role created later — a reporting role, say —
+inherits full DML on the outbound queue automatically and cannot be stripped of it.
+**Why (C) was not taken now.** It is a larger decision than this finding supports on its own. The
+finding feeds it; `docs/JOBS_AND_SCHEDULING.md` §2 settles it.
+**Revisit when.** Supabase changes the default grants, a second login-capable role is proposed, or
+the clock design is decided. `supabase/tests/verify_hosted.sql` reports the live ACLs and is where a
+change would surface.
+
+---
+
+### ADR-016 — Migrations deploy from GitHub Actions, behind four gates, from a public repository
+**Context.** The owner's machine cannot reach the database: the direct host is IPv6-only and
+unreachable, and the Supavisor pooler times out from that network. GitHub's runners reach it `[V]
+2026-10-22`. ADR-005 permits Actions for deployment while forbidding it as the production
+scheduler, so a deployment workflow is in scope and a job clock is not.
+**Options.** (A) apply migrations by hand in the Supabase SQL editor; (B) Actions with a single
+manual trigger; (C) Actions on every push to `main`.
+**Decision.** **(B).** `[D]` (A) violates R10. (C) makes a merge a database write, which is the
+wrong default for a forward-only schema. Four independent gates: `workflow_dispatch` only; a typed
+`apply` confirmation passed through the environment rather than interpolated into a shell, since the
+input is attacker-controllable on a public repository; a GitHub Environment with a required
+reviewer and `can_admins_bypass: false`; and target verification before `link`. A dry run always
+runs first, so the log records what was about to be applied.
+**Consequences.** Required reviewers are a paid feature on a **private** repository and free on a
+public one, so the gate and the secrecy of the specifications are in direct tension on a $0 budget.
+The repository is public `[D]`, which makes the gate real and the design documents world-readable.
+Workflow logs are world-readable with it, so the project ref is stored as a **secret** rather than a
+variable — GitHub then masks it even inside Supabase CLI error text, which was observed working
+`[V] 2026-10-22` — while a four-character fingerprint, too short to mask, still prints so a reviewer
+can confirm the target. The test workflow deliberately holds no credential at all, which is why it
+needs none of the same-repository guard the dry-run workflow requires.
+**Why the fingerprint is not simply omitted.** A reviewer approving a database write needs to know
+which database. Printing nothing would make the approval ceremonial.
+**Revisit when.** The repository is made private — the reviewer gate dies with it and Gate 2 would
+have to carry the weight — or a production project exists, at which point a single account-wide
+Supabase access token is no longer an acceptable way to reach both.
+
+---
+
 ## 7. Rejected alternatives, briefly
 
 | Rejected | Reason |
