@@ -1,0 +1,77 @@
+-- ============================================================================
+-- 20261022213000_net_privileges_unrevokable.sql
+--
+-- Supersedes 20261022203000_net_privileges.sql, which does nothing. R10
+-- forbids editing a merged migration, so the correction is recorded forward.
+--
+-- WHAT WAS ATTEMPTED
+--   20261022203000 revoked, from public/anon/authenticated, every privilege on
+--   the net schema, its tables, its sequences and its functions.
+--
+-- WHY IT HAD NO EFFECT
+--   Measured on the hosted project after that migration applied successfully:
+--
+--     schema net                    {supabase_admin=UC/supabase_admin,
+--                                    =U/supabase_admin, …,
+--                                    anon=U/supabase_admin,
+--                                    authenticated=U/supabase_admin}
+--     net.http_request_queue        {supabase_admin=arwdDxtm/supabase_admin,
+--                                    =arwdDxtm/supabase_admin}
+--     net._http_response            {supabase_admin=arwdDxtm/supabase_admin,
+--                                    =arwdDxtm/supabase_admin}
+--     net.http_request_queue_id_seq {supabase_admin=rwU/supabase_admin,
+--                                    =rwU/supabase_admin}
+--
+--   Unchanged. Every grant carries `/supabase_admin`: supabase_admin made
+--   them. PostgreSQL lets a role revoke only grants it made itself, plus
+--   those it can reach as object owner or superuser. Migrations run as
+--   `postgres`, which is none of those here:
+--
+--     select current_user,
+--            pg_has_role(current_user,'supabase_admin','member'),
+--            pg_has_role(current_user,'supabase_admin','usage');
+--     -> postgres | false | false
+--
+--   A revoke that matches no grant the caller made is not an error. It
+--   succeeds and changes nothing, which is why the migration reported
+--   success.
+--
+-- HOW BIG THIS ACTUALLY IS
+--   Smaller than 20261022203000's comment claimed, and of a different kind.
+--   A grant to PUBLIC only matters to a role that can log in. On Supabase
+--   anon, authenticated and service_role are NOLOGIN; in practice only
+--   `postgres` can connect, and whoever holds that password already controls
+--   the database, so reaching the queue is no escalation for them.
+--
+--   The real exposure is latent: any login-capable role created later
+--   inherits full DML on the outbound request queue automatically, and that
+--   cannot be taken away, because `postgres` cannot revoke a PUBLIC grant it
+--   did not make.
+--
+-- WHAT THIS MEANS FOR THE JOB ENGINE
+--   Two constraints, binding on anything built on pg_net:
+--
+--   1. No secret may travel in a pg_net request header. The queue row holds
+--      the header, and the queue is readable by PUBLIC. An Edge Function
+--      invoked this way must authenticate the caller some other way.
+--   2. A direct insert into net.http_request_queue reaches the network
+--      without passing through job code, so R9's kill switch cannot cover it.
+--      The switch remains correct for every path the application controls,
+--      which today is every path that exists.
+--
+--   Whether the work clock stays on pg_cron + pg_net or moves to the
+--   Cloudflare Worker of ADR-003 is a design decision this finding feeds, not
+--   one it settles.
+--
+-- STANDING CHECK
+--   supabase/tests/verify_hosted.sql reports these ACLs. If Supabase ever
+--   removes the PUBLIC grants, that script is where it will show up.
+--
+-- This migration changes nothing on purpose. A migration that claimed to fix
+-- this and did not is what produced the problem it documents.
+-- ============================================================================
+
+do $$
+begin
+  raise notice 'net privileges: documented as unrevokable from the postgres role; no change made';
+end $$;
