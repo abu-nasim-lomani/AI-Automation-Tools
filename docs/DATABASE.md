@@ -1190,7 +1190,13 @@ onboarding.
 
 ## 10. Open questions
 
-1. `[?]` Confirm `pgcrypto`, `pg_cron`, and `pg_net` are all enabled on the free plan.
+1. ~~`[?]` Confirm `pgcrypto`, `pg_cron`, and `pg_net` are all enabled on the free plan.~~
+   **Resolved `[V] 2026-10-22`.** All three are available and installed on the free plan, on
+   separate evidence. `pg_net` and `pg_cron`: the `net` and `cron` schemas exist on the hosted
+   development project, owned by `supabase_admin`, and neither extension creates its schema unless
+   installed. `pgcrypto`: migration `20261020230300_triggers.sql` calls `digest()` and applied
+   successfully, which it could not have done otherwise. Note the consequence recorded in ADR-015 —
+   `net`'s grants cannot be revoked from the `postgres` role.
 2. `[?]` Confirm the server is **PostgreSQL 15 or later** — required by both `security_invoker`
    views and the `on delete set null (column)` clauses in §4.1. Fallbacks are documented for both.
 3. `[?]` Expose `last_error` to users, or only a sanitised code?

@@ -5,8 +5,10 @@
 > **"You Know MD Abu Nasim"**. Designed multi-tenant from day one, operated single-tenant until
 > Meta Advanced Access is granted.
 
-**Status: Stage 0 — specifications only. No application code exists yet.**
-Last updated: 2026-10-20.
+**Status: specifications complete. M1 (data layer) is implemented and applied to the hosted
+development project** `[V] 2026-10-22` — five forward-only migrations, envelope encryption, and a
+107-assertion security suite that runs in CI on every change. No job engine, no UI, no Meta call.
+Last updated: 2026-10-22.
 
 ---
 
@@ -52,7 +54,7 @@ Each rule exists because its failure mode is expensive or irreversible.
 
 | # | Rule | Enforced by |
 |---|---|---|
-| R1 | **No table holding tenant data without RLS enabled and at least one policy.** No `anon` policy, ever. | `docs/DATABASE.md` isolation matrix; CI fails on any tenant table missing a matrix entry |
+| R1 | **No table holding tenant data without RLS enabled and at least one policy.** No `anon` policy, ever. | SEC-01 asserts RLS, policies and cross-tenant denial on every tenant table; run in CI by `.github/workflows/tests.yml` `[V] 2026-10-22`. `[?]` The matrix-completeness check — CI failing when a tenant table has *no* entry in `docs/DATABASE.md`'s isolation matrix — is **not** implemented |
 | R2 | **Secrets never reach the client.** No secret in `NEXT_PUBLIC_*`, none in an API response, none in a build artifact. APIs return masks only (`AIza…7f2c`). **No client role holds a `select` grant on a ciphertext column** — RLS filters rows, not columns, so this needs column privileges, not a policy. | CI grep over build output (SEC-04) + column-privilege suite (SEC-16) |
 | R3 | **Secrets never reach logs.** All logging goes through one redaction helper with a deny-list. | Unit test on the redactor + CI grep forbidding raw error logging on provider paths |
 | R4 | **Never republish on an ambiguous publish outcome.** Timeout, 5xx, or unparseable response ⇒ `needs_verification`. **No automatic transition from `needs_verification` to `pending` exists** — a clean read that finds nothing is evidence of absence, not proof, so exhausting the read-back schedule leads to `unresolved` and a human decides. A crashed worker returns to `pending` **only when no request has ever been issued for the job** (`request_sent_at IS NULL`) `[K16]` — a marker that is merely stale for the *current* attempt proves nothing about earlier attempts. `failed` means **"no request was ever issued"** `[K18]`; `unresolved` means "unknown" — never conflate them. The application issues **at most one request per job**, plus at most one more after a guarded human attestation of absence. That is an **application-level limit, not a guarantee against duplicate publication** `[K22]` — see `docs/SECURITY.md` R-A10. | Fault-injection suite (SEC-05), crash classification (SEC-18), human resolution (SEC-24), blocking in CI |
@@ -62,8 +64,8 @@ Each rule exists because its failure mode is expensive or irreversible.
 | R8 | **No fabrication in generated content.** Prompts forbid invented facts, statistics, quotations, news, and first-person experience; a critic pass rejects violations. | Content eval harness |
 | R9 | **The kill switch is checked first** by **every** job that makes an outbound request, immediately before the request — generation, publishing, **verification/read-back**, and token health checks alike. No job is exempt because its call is "only a read". `kill_switch` stops all outbound traffic; `paused` stops publishing and generation but lets verification keep reconciling. | SEC-09 asserts zero outbound calls per job type while the switch is on (`docs/DATABASE.md` §11.7) |
 | R10 | **Every migration is forward-only and in version control.** No ad-hoc schema change in the Supabase dashboard. | Migration policy in `docs/DATABASE.md` |
-| R11 | **Owner-only actions are enforced in the database, not the UI.** Connecting a Page, changing credentials, editing the schedule, and changing membership require `app.has_role(org_id,'owner')`. A role column that no policy reads is decoration. The one deliberate exception is the emergency stop, available to any member. | Role matrix in `docs/SECURITY.md` §7.1; test suite SEC-22 in `docs/DATABASE.md` §11.3 |
-| R12 | **Every tenant foreign key carries `org_id`.** Single-column references constrain existence, not ownership, and the service role bypasses RLS entirely. | Composite FKs in `docs/DATABASE.md` §4.1; test suite SEC-17 §11.2 |
+| R11 | **Owner-only actions are enforced in the database, not the UI.** Connecting a Page, changing credentials, editing the schedule, and changing membership require `app.has_role(org_id,'owner')`. A role column that no policy reads is decoration. The one deliberate exception is the emergency stop, available to any member. | Role matrix in `docs/SECURITY.md` §7.1; test suite SEC-22 in `docs/DATABASE.md` §11.3; run in CI `[V] 2026-10-22` |
+| R12 | **Every tenant foreign key carries `org_id`.** Single-column references constrain existence, not ownership, and the service role bypasses RLS entirely. | Composite FKs in `docs/DATABASE.md` §4.1; test suite SEC-17 §11.2; run in CI `[V] 2026-10-22` |
 
 ---
 
@@ -158,10 +160,10 @@ explicit approval.
 | `docs/SECURITY.md` | Threat model, crypto design, required tests | **written** |
 | `docs/DATABASE.md` | Schema, RLS, state machines, isolation matrix | **written** |
 | `docs/PRD.md` | User stories and done-conditions | planned |
-| `docs/JOBS_AND_SCHEDULING.md` | Clocks, leases, retry, recovery, the `unresolved` escalation workflow | **needed next — awaiting approval.** The 2026-10-20 audit pushed the publish state machine across three documents; it should live in one |
+| `docs/JOBS_AND_SCHEDULING.md` | Clocks, leases, retry, recovery, the `unresolved` escalation workflow | **written (draft).** Not yet reconciled with ADR-015 |
 | `docs/CONTENT_ENGINE.md` | Prompts, counting rules, Bangla eval rubric | planned |
-| `docs/API_INTEGRATIONS.md` | Meta and provider contracts, error tables | planned |
-| `docs/DESIGN_SYSTEM.md` | Tokens, dual-script typography, states, a11y | planned |
+| `docs/API_INTEGRATIONS.md` | Meta and provider contracts, error tables | **written (draft)** |
+| `docs/DESIGN_SYSTEM.md` | Tokens, dual-script typography, states, a11y | **written (draft).** Token values live here only; `.claude/skills/saas-ui-standards` points at them |
 | `docs/TESTING.md` | Pyramid, fixtures, CI gates | planned |
 | `docs/ROADMAP.md` | Stage gates and cost triggers | planned |
 
@@ -189,7 +191,8 @@ around it.
 
 ## 9. Working agreements
 
-- **Do not scaffold.** Stage 0 creates documents only.
+- **Do not scaffold.** Stage 0 created documents only; implementation is approved one milestone at
+  a time. M1 (data layer) is approved and done. Nothing outside an approved milestone gets built.
 - **Do not add a dependency** without naming it and its purpose first.
 - **Do not enable a plugin, skill, or MCP connector** without explicit approval.
 - **Never request, display, or write a real credential** — API key, Page token, database URL,
