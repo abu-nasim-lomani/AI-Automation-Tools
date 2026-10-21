@@ -23,9 +23,14 @@ fi
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$C"; then
   echo "== starting $C (postgres:15)"
+  # No published port. Every statement reaches the container through
+  # `docker exec`, never over TCP, so a host port mapping buys nothing and
+  # costs a CI failure whenever that port is already taken on the runner —
+  # which is how this line was found. It also kept a test database listening
+  # on the host for no reason.
   docker rm -f "$C" >/dev/null 2>&1 || true
   docker run -d --name "$C" -e POSTGRES_PASSWORD=localtest-only \
-    -e POSTGRES_DB=postplan -p 55432:5432 postgres:15 >/dev/null
+    -e POSTGRES_DB=postplan postgres:15 >/dev/null
   until docker exec "$C" pg_isready -U postgres -d postplan >/dev/null 2>&1; do sleep 1; done
 fi
 
