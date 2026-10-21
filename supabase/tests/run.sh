@@ -34,6 +34,7 @@ HARNESS=(supabase/tests/harness/00_auth_shim.sql
          supabase/migrations/20261020230200_privileges_and_rls.sql
          supabase/migrations/20261020230300_triggers.sql
          supabase/migrations/20261022190000_extensions.sql
+         supabase/migrations/20261022203000_net_privileges.sql
          supabase/tests/harness/10_assert.sql
          supabase/tests/harness/20_seed.sql)
 SUITES=(supabase/tests/suites/sec_01_cross_tenant.sql
