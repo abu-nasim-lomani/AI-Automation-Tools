@@ -27,6 +27,40 @@ function b64(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 }
 
+// Ask the key itself which models it can call, then pick one — so the model is
+// always one THIS key actually has, and a wrong guess can never 404. Returns the
+// generateContent-capable model names (no "models/" prefix). Empty on failure.
+async function geminiModels(apiKey: string): Promise<string[]> {
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000",
+      { headers: { "x-goog-api-key": apiKey }, signal: AbortSignal.timeout(10000) },
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    const models = (data.models ?? []) as Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+    return models
+      .filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"))
+      .map((m) => (m.name ?? "").replace(/^models\//, ""))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// Prefer a cheap, stable text flash model; fall back to any usable flash, then
+// any text model the key has. Skips image/tts/embedding/experimental variants.
+function pickGeminiModel(names: string[]): string | null {
+  const bad = /(image|vision|tts|audio|embedding|aqa|learnlm|robot|gemma|deep-research|antigravity|argon|preview|exp)/i;
+  const prefer = [
+    "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite",
+    "gemini-flash-lite-latest", "gemini-2.0-flash",
+  ];
+  for (const p of prefer) if (names.includes(p)) return p;
+  const flash = names.find((n) => /flash/i.test(n) && !bad.test(n));
+  return flash ?? names.find((n) => !bad.test(n)) ?? names[0] ?? null;
+}
+
 interface Credential {
   id: string; provider: "gemini" | "groq"; model: string; tier: "unpaid" | "paid";
   key_version: number; ciphertext: string; iv: string;
@@ -88,16 +122,22 @@ Deno.serve(async (req) => {
     let creds = ctx.credentials;
     if (ctx.region === "eu_uk") creds = creds.filter((c) => c.tier === "paid");
     const attempts: Attempt[] = [];
+    // Remember what the Gemini key offered, so a 404 can report it instead of
+    // leaving us guessing which key is actually in use.
+    let geminiAvailable: string[] = [];
     for (const c of creds) {
       try {
         const key = await openCredential(
           keyring, { orgId: ctx.org_id, credentialId: c.id },
           { ciphertext: b64(c.ciphertext), iv: b64(c.iv), keyVersion: c.key_version },
         );
-        // Ask the key which models it can actually use, rather than guessing a
-        // name (which 404s if that model is not available to this key). Pick a
-        // flash model that supports generateContent.
-        const model = c.provider === "gemini" ? "gemini-2.5-flash" : c.model;
+        let model = c.model;
+        if (c.provider === "gemini") {
+          // Pick from THIS key's own model list, so the name is one it has.
+          const names = await geminiModels(key);
+          if (names.length > 0) geminiAvailable = names;
+          model = pickGeminiModel(names) ?? "gemini-flash-latest";
+        }
         attempts.push({ provider: c.provider, model, apiKey: key });
       } catch { /* skip an undecryptable credential */ }
     }
@@ -118,6 +158,14 @@ Deno.serve(async (req) => {
         }
         if (e.errorClass === "rate_limited" || e.errorClass === "quota") {
           return json({ ok: false, error: "Gemini's free quota is busy right now — wait a minute (or until the daily limit resets) and try again" }, 429);
+        }
+        // A 404 means the model name is not on this key. Report what the key
+        // DOES offer, so the cause (wrong key, or no flash model) is visible.
+        if (e.status === 404) {
+          const offer = geminiAvailable.length
+            ? geminiAvailable.slice(0, 10).join(", ")
+            : "(the key returned no model list)";
+          return json({ ok: false, error: `model not found on this key — it offers: ${offer}` }, 400);
         }
         // Surface the provider's own message/status so the cause is visible.
         const bits = [
