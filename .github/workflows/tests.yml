@@ -57,3 +57,4 @@ jobs:
           node --experimental-strip-types --test
           packages/core/crypto/envelope.test.ts
           packages/core/providers/providers.test.ts
+          packages/core/content/content.test.ts
