@@ -227,7 +227,7 @@ test("retry: a transient failure is retried in place, then succeeds", async () =
   assert.equal(n, 3);
 });
 
-test("retry: a persistent 429 throws rate_limited after the retries", async () => {
+test("retry: a 429 is NOT retried in place (fails fast to avoid a timeout)", async () => {
   let n = 0;
   const fetchImpl = (async () => { n++; return new Response(JSON.stringify({ error: { code: 429 } }), { status: 429 }); }) as unknown as FetchLike;
   await assert.rejects(
@@ -236,7 +236,7 @@ test("retry: a persistent 429 throws rate_limited after the retries", async () =
       fetchImpl, { retryBaseMs: 1, maxRetries: 2 }),
     (e: unknown) => e instanceof ProviderError && e.errorClass === "rate_limited",
   );
-  assert.equal(n, 3); // 1 + 2 retries
+  assert.equal(n, 1); // rate_limited is not retried in place
 });
 
 test("retry: an auth failure is NOT retried", async () => {
