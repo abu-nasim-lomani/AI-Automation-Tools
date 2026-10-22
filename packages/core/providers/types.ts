@@ -36,6 +36,16 @@ export const RETRYABLE: ReadonlySet<ProviderErrorClass> = new Set<ProviderErrorC
 
 /** A normalised provider failure. Never carries the key or a raw response body. */
 export class ProviderError extends Error {
+  // `declare` fields: type-only, so they satisfy the checker without emitting a
+  // class field that `useDefineForClassFields` would reset to undefined after
+  // the constructor assigns it. Node's type-stripping removes them; Deno's
+  // type-check reads them.
+  declare readonly provider: ProviderName;
+  declare readonly errorClass: ProviderErrorClass;
+  declare readonly status?: number;
+  declare readonly providerCode?: string;
+  declare readonly retryAfterMs?: number;
+
   constructor(
     message: string,
     opts: {
