@@ -43,6 +43,11 @@ export interface GenerateDraftInput {
   topic: Topic;
   attempts: readonly Attempt[];   // provider credentials, default-first
   maxRegenerations?: number;      // default 2 => up to 3 attempts
+  /** Skip the AI fabrication critic (one fewer call). For an on-demand sample
+   *  the owner reviews the draft anyway; halves the provider usage. */
+  skipCritic?: boolean;
+  /** Cap the model's output, keeping posts short and tokens low. */
+  maxOutputTokens?: number;
 }
 
 // A marker the critic prompt carries so a test harness can tell a critic call
@@ -104,7 +109,7 @@ export async function generateDraft(
     // handler can pause the org or back off. The critic's own failure is
     // handled inside runFabricationCritic.
     const gen = await generateWithFallback(
-      { system, prompt: user, temperature: 0.9 },
+      { system, prompt: user, temperature: 0.9, maxOutputTokens: input.maxOutputTokens },
       input.attempts,
       fetchImpl,
     );
@@ -119,6 +124,16 @@ export async function generateDraft(
         critique: { ok: false, layer: "deterministic", reason }, accepted: false, notes: reason,
       };
       continue;
+    }
+
+    // An on-demand sample can skip the second (critic) call to save quota; the
+    // owner reviews the draft before it is ever approved.
+    if (input.skipCritic) {
+      last = {
+        body, counts, provider: gen.provider, model: gen.model, attempt: i,
+        critique: { ok: true, layer: "ok" }, accepted: true, notes: null,
+      };
+      return last;
     }
 
     const crit = await runFabricationCritic(body, input.attempts, fetchImpl);
