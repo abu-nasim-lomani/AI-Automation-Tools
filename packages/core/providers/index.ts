@@ -14,6 +14,7 @@ import {
   type GenerateInput,
   type GenerateOutput,
   type ProviderName,
+  type ProviderErrorClass,
   ProviderError,
   RETRYABLE,
   type TextProvider,
@@ -43,15 +44,60 @@ export interface FallbackResult extends GenerateOutput {
   attempt: number;
 }
 
+export interface FallbackOptions {
+  /** Extra tries per attempt on a transient / throttled failure. Default 2. */
+  maxRetries?: number;
+  /** Base backoff in ms (doubles each retry, capped at 4s). Default 600. */
+  retryBaseMs?: number;
+}
+
+// A 503 or a 429 is worth waiting out; auth/invalid/blocked and a hard quota
+// are not, so only these two are retried in place.
+const RETRY_IN_PLACE: ReadonlySet<ProviderErrorClass> = new Set<ProviderErrorClass>([
+  "transient",
+  "rate_limited",
+]);
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** Call one provider, retrying in place on a transient / throttled failure. */
+async function callWithRetry(
+  provider: TextProvider,
+  input: GenerateInput,
+  apiKey: string,
+  maxRetries: number,
+  baseMs: number,
+): Promise<GenerateOutput> {
+  let last: ProviderError | undefined;
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      return await provider.generate(input, apiKey);
+    } catch (e) {
+      const err = e instanceof ProviderError
+        ? e
+        : new ProviderError((e as Error).message, { provider: provider.name, errorClass: "transient" });
+      if (!RETRY_IN_PLACE.has(err.errorClass)) throw err; // not worth waiting out
+      last = err;
+      if (i < maxRetries) {
+        const delay = Math.min(err.retryAfterMs ?? baseMs * 2 ** i, 4000);
+        await sleep(delay);
+      }
+    }
+  }
+  throw last;
+}
+
 /**
- * Try each attempt in order. Returns the first success. Falls through only on a
- * retryable class; re-throws anything terminal immediately. If every attempt is
- * retryable-but-failed, throws the LAST error, with the earlier ones attached.
+ * Try each attempt in order. Each is retried in place on a transient / throttled
+ * failure (a 503 or a 429 passes before it fails for good). Falls through to the
+ * next attempt only on a retryable class; re-throws anything terminal at once.
+ * If every attempt is retryable-but-failed, throws the LAST error.
  */
 export async function generateWithFallback(
   input: Omit<GenerateInput, "model">,
   attempts: readonly Attempt[],
   fetchImpl: FetchLike = fetch,
+  opts: FallbackOptions = {},
 ): Promise<FallbackResult> {
   if (attempts.length === 0) {
     throw new ProviderError("no provider credentials supplied", {
@@ -59,13 +105,15 @@ export async function generateWithFallback(
       errorClass: "terminal",
     });
   }
+  const maxRetries = opts.maxRetries ?? 2;
+  const baseMs = opts.retryBaseMs ?? 600;
 
   const failures: ProviderError[] = [];
   for (let i = 0; i < attempts.length; i++) {
     const a = attempts[i];
     const provider = providerFor(a.provider, fetchImpl);
     try {
-      const out = await provider.generate({ ...input, model: a.model }, a.apiKey);
+      const out = await callWithRetry(provider, { ...input, model: a.model }, a.apiKey, maxRetries, baseMs);
       return { ...out, attempt: i };
     } catch (e) {
       const err = e instanceof ProviderError

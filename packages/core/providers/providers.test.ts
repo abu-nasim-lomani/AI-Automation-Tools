@@ -156,7 +156,7 @@ test("fallback: a transient primary failure falls through to the fallback", asyn
     { prompt: "hi" },
     [{ provider: "gemini", model: "g", apiKey: FAKE_GEMINI_KEY },
      { provider: "groq", model: "l", apiKey: FAKE_GROQ_KEY }],
-    fetch);
+    fetch, { maxRetries: 0 });
   assert.equal(out.text, "from groq");
   assert.equal(out.attempt, 1);
   assert.equal(n, 2);
@@ -184,7 +184,7 @@ test("fallback: when every attempt is retryable-but-failed, the last error is th
       { prompt: "hi" },
       [{ provider: "gemini", model: "g", apiKey: FAKE_GEMINI_KEY },
        { provider: "groq", model: "l", apiKey: FAKE_GROQ_KEY }],
-      fetch);
+      fetch, { retryBaseMs: 1 });
     assert.fail("should have thrown");
   } catch (e) {
     assert.ok(e instanceof ProviderError);
@@ -206,4 +206,47 @@ test("retryAfterMs: seconds and HTTP-date forms", () => {
   const inTen = new Date(now + 10_000).toUTCString();
   const ms = retryAfterMs(inTen, now);
   assert.ok(ms !== undefined && Math.abs(ms - 10_000) < 1500);
+});
+
+// ── Auto-retry on transient / throttled ─────────────────────────────────────
+
+test("retry: a transient failure is retried in place, then succeeds", async () => {
+  let n = 0;
+  const fetchImpl = (async () => {
+    n++;
+    if (n < 3) return new Response(JSON.stringify({ error: { code: 503 } }), { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok after retry" }] } }] }), { status: 200 });
+  }) as unknown as FetchLike;
+  const out = await generateWithFallback(
+    { prompt: "hi" },
+    [{ provider: "gemini", model: "m", apiKey: "AIza-EXAMPLE-NOT-REAL" }],
+    fetchImpl,
+    { retryBaseMs: 1 },
+  );
+  assert.equal(out.text, "ok after retry");
+  assert.equal(n, 3);
+});
+
+test("retry: a persistent 429 throws rate_limited after the retries", async () => {
+  let n = 0;
+  const fetchImpl = (async () => { n++; return new Response(JSON.stringify({ error: { code: 429 } }), { status: 429 }); }) as unknown as FetchLike;
+  await assert.rejects(
+    generateWithFallback({ prompt: "hi" },
+      [{ provider: "gemini", model: "m", apiKey: "AIza-EXAMPLE-NOT-REAL" }],
+      fetchImpl, { retryBaseMs: 1, maxRetries: 2 }),
+    (e: unknown) => e instanceof ProviderError && e.errorClass === "rate_limited",
+  );
+  assert.equal(n, 3); // 1 + 2 retries
+});
+
+test("retry: an auth failure is NOT retried", async () => {
+  let n = 0;
+  const fetchImpl = (async () => { n++; return new Response(JSON.stringify({ error: { code: 403 } }), { status: 403 }); }) as unknown as FetchLike;
+  await assert.rejects(
+    generateWithFallback({ prompt: "hi" },
+      [{ provider: "gemini", model: "m", apiKey: "AIza-EXAMPLE-NOT-REAL" }],
+      fetchImpl, { retryBaseMs: 1 }),
+    (e: unknown) => e instanceof ProviderError && e.errorClass === "auth",
+  );
+  assert.equal(n, 1); // tried once, not retried
 });
