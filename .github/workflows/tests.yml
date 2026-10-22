@@ -52,5 +52,8 @@ jobs:
           # Functions will use.
           node-version: 24.15.0
 
-      - name: Envelope encryption tests
-        run: node --experimental-strip-types --test packages/core/crypto/envelope.test.ts
+      - name: Core unit tests (crypto, providers)
+        run: >
+          node --experimental-strip-types --test
+          packages/core/crypto/envelope.test.ts
+          packages/core/providers/providers.test.ts
