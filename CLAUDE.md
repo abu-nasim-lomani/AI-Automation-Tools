@@ -161,7 +161,7 @@ explicit approval.
 | `docs/DATABASE.md` | Schema, RLS, state machines, isolation matrix | **written** |
 | `docs/PRD.md` | User stories and done-conditions | planned |
 | `docs/JOBS_AND_SCHEDULING.md` | Clocks, leases, retry, recovery, the `unresolved` escalation workflow | **written (draft).** Not yet reconciled with ADR-015 |
-| `docs/CONTENT_ENGINE.md` | Prompts, counting rules, Bangla eval rubric | planned |
+| `docs/CONTENT_ENGINE.md` | Prompts, counting rules, Bangla eval rubric | **written (draft).** Counting + critic + R8; eval rubric deferred |
 | `docs/API_INTEGRATIONS.md` | Meta and provider contracts, error tables | **written (draft)** |
 | `docs/DESIGN_SYSTEM.md` | Tokens, dual-script typography, states, a11y | **written (draft).** Token values live here only; `.claude/skills/saas-ui-standards` points at them |
 | `docs/TESTING.md` | Pyramid, fixtures, CI gates | planned |
