@@ -105,6 +105,9 @@ Deno.serve(async (req) => {
         if (e.errorClass === "auth" || e.errorClass === "invalid") {
           return json({ ok: false, error: "the AI key was rejected — check it is a valid Gemini key" }, 400);
         }
+        if (e.errorClass === "rate_limited" || e.errorClass === "quota") {
+          return json({ ok: false, error: "Gemini's free quota is busy right now — wait a minute (or until the daily limit resets) and try again" }, 429);
+        }
         // Surface the provider's own message/status so the cause is visible.
         const bits = [
           `provider ${e.errorClass}`,

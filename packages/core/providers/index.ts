@@ -51,11 +51,12 @@ export interface FallbackOptions {
   retryBaseMs?: number;
 }
 
-// A 503 or a 429 is worth waiting out; auth/invalid/blocked and a hard quota
-// are not, so only these two are retried in place.
+// Only a 503 is retried in place — it clears in seconds. A 429 is NOT: on the
+// free tier it is a real rate/quota limit that an in-request retry cannot clear,
+// and sleeping on it pushes the Edge Function past its time limit (a 546). A 429
+// fails fast with a clear message so the user waits and retries the whole run.
 const RETRY_IN_PLACE: ReadonlySet<ProviderErrorClass> = new Set<ProviderErrorClass>([
   "transient",
-  "rate_limited",
 ]);
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
