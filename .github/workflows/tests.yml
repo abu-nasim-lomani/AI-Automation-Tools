@@ -74,7 +74,7 @@ jobs:
       # resolves the real imports, including deno-postgres, and type-checks the
       # whole graph, so a broken import or type fails CI before a deploy.
       - name: Type-check the edge functions
-        run: deno check supabase/functions/generate/index.ts supabase/functions/write-credential/index.ts
+        run: deno check supabase/functions/generate/index.ts supabase/functions/write-credential/index.ts supabase/functions/generate-now/index.ts
 
   web:
     runs-on: ubuntu-24.04
