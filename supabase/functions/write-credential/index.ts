@@ -18,14 +18,27 @@ import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2.45.4";
 import { keyringFromEnv, sealCredential } from "../../../packages/core/crypto/envelope.ts";
 
+// This function is called from the browser (a different origin), so it must
+// answer the CORS preflight and echo the headers on every response. Auth is by
+// the bearer token, not the origin, so "*" is acceptable here.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, "content-type": "application/json" },
+  });
 }
 
 const PROVIDERS = new Set(["gemini", "groq"]);
 const TIERS = new Set(["unpaid", "paid"]);
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "method not allowed" }, 405);
 
   const authHeader = req.headers.get("Authorization");
