@@ -421,3 +421,10 @@ enabled = true
 # MASTER_KEY_V1 and GENERATE_TRIGGER_SECRET secrets are set in the dashboard,
 # never in this file.
 verify_jwt = false
+
+[functions.publish]
+# Same as generate: invoked by the clock with a shared trigger secret
+# (PUBLISH_TRIGGER_SECRET), not a user JWT, so platform JWT verification is off
+# and the handler authorises in code (docs/JOBS_AND_SCHEDULING.md §9, ADR-018).
+# The MASTER_KEY_V1 and PUBLISH_TRIGGER_SECRET secrets are set in the dashboard.
+verify_jwt = false
