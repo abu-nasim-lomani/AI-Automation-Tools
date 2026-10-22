@@ -75,3 +75,21 @@ jobs:
       # whole graph, so a broken import or type fails CI before a deploy.
       - name: Type-check the edge functions
         run: deno check supabase/functions/generate/index.ts
+
+  web:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      # Type-checks and builds the SPA. It holds no secret and reads no network
+      # at build time, so it needs no credentials. A broken type or import fails
+      # CI before a deploy.
+      - run: npm ci
+      - run: npm run build

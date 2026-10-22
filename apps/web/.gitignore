@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.tsbuildinfo
+# tsc -b emits these from the composite vite.config project; they are build
+# artifacts, not source.
+vite.config.js
+vite.config.d.ts
