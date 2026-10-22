@@ -106,7 +106,7 @@ export async function generateWithFallback(
       errorClass: "terminal",
     });
   }
-  const maxRetries = opts.maxRetries ?? 2;
+  const maxRetries = opts.maxRetries ?? 1;
   const baseMs = opts.retryBaseMs ?? 600;
 
   const failures: ProviderError[] = [];

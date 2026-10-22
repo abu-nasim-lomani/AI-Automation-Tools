@@ -55,6 +55,9 @@ export function createGeminiProvider(fetchImpl: FetchLike = fetch): TextProvider
           method: "POST",
           headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
           body: JSON.stringify(body),
+          // Fail fast if the provider hangs, so the Edge Function does not run
+          // past its wall-clock limit (a 546) waiting on a stalled response.
+          signal: AbortSignal.timeout(15000),
         });
       } catch (e) {
         // A network-level failure: no response at all.
