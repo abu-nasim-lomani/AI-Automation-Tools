@@ -69,14 +69,30 @@ threat model (`docs/SECURITY.md`, frozen).
 
 ## 2. The clocks
 
-Four clocks, three of them inside Supabase and one deliberately outside it.
+Four clocks. Only one runs inside Supabase; the other three fire from Cloudflare.
 
-| Clock | Schedule | Invokes | Runtime | Why this cadence |
-|---|---|---|---|---|
-| **publish** (verification runs as its pre-pass) | `* * * * *` | Edge Function `publish` | Deno | One minute is the finest useful granularity: a slot's effective precision is then under a minute, well inside the `[F]` J5 45-minute window, and a dropped run self-heals on the next tick |
-| **materialize** | `0 * * * *` | `app.materialize_jobs()` — **a Postgres function, not an Edge Function** | Postgres | Hourly re-runs are free and idempotent (`[F]` J1), so a missed run self-heals without a catch-up path |
-| **generate** | `30 2 * * *` (02:30 UTC ≈ 08:30 Asia/Dhaka) | Edge Function `generate` | Deno | Daily is enough to hold a 2–3 day buffer (`ARCHITECTURE.md` ADR-008). Chosen off-peak so a slow provider never collides with a publish slot |
-| **health** | `*/15` on **Cloudflare**, calling Edge Function `health` | Deno | External by design (`ARCHITECTURE.md` ADR-003): a scheduler cannot detect its own death, and the traffic also keeps the project out of inactivity pause |
+That split is `ARCHITECTURE.md` ADR-017, and it is a consequence of ADR-015. Anything invoking an
+Edge Function must send an `Authorization` header, `pg_net` stores that header in
+`net.http_request_queue`, and PUBLIC can read that table on a grant that cannot be revoked. So the
+clocks that carry a credential moved out of the database, and `pg_cron` keeps only the work that
+makes no outbound call.
+
+| Clock | Schedule | Triggered by | Invokes | Runtime | Why this cadence |
+|---|---|---|---|---|---|
+| **publish** (verification runs as its pre-pass) | `* * * * *` | Cloudflare Worker cron | Edge Function `publish` | Deno | One minute is the finest useful granularity: a slot's effective precision is then under a minute, well inside the `[F]` J5 45-minute window, and a dropped run self-heals on the next tick |
+| **materialize** | `0 * * * *` | `pg_cron` | `app.materialize_jobs()` — **a Postgres function, not an Edge Function** | Postgres | Hourly re-runs are free and idempotent (`[F]` J1), so a missed run self-heals without a catch-up path. No network call, so ADR-015 does not reach it |
+| **generate** | `30 2 * * *` (02:30 UTC ≈ 08:30 Asia/Dhaka) | Cloudflare Worker cron | Edge Function `generate` | Deno | Daily is enough to hold a 2–3 day buffer (`ARCHITECTURE.md` ADR-008). Chosen off-peak so a slow provider never collides with a publish slot |
+| **health** | `*/15` | Cloudflare Worker cron | Edge Function `health` | Deno | External by design (`ARCHITECTURE.md` ADR-003): a scheduler cannot detect its own death, and the traffic also keeps the project out of inactivity pause |
+
+(The `health` row previously had one cell fewer than the header. Rebuilt here with the trigger made
+explicit for every clock.)
+
+`[D]` **What this costs.** ADR-003 chose Cloudflare as an *independent* observer. Three of the four
+clocks now live there, so that independence is largely spent: if Cloudflare stops, publishing stops
+and nothing raises an alarm. The compensation is an in-database overdue detector — pure SQL on
+`pg_cron`, no network — recording lateness for whoever next asks. It cannot reach out on its own.
+`[?]` A genuinely independent watch over the primary clock needs a third free observer, and that is
+an open decision (§16).
 
 `[P]` **Materialization is a Postgres function rather than an Edge Function.** Rationale: it needs
 no `Intl.Segmenter` and no outbound call, so it is pure SQL. Keeping it in-database removes one
@@ -89,16 +105,17 @@ replenished even if Edge Function deployment is broken. (§16 D11.)
 |---|---|---|
 | publish (incl. verify pre-pass) | ≈ 43,200 | 60 × 24 × 30 |
 | generate | 30 | |
-| health | ≈ 2,880 | Driven by the Cloudflare clock |
+| health | ≈ 2,880 | Driven by the Cloudflare clock, as publish and generate now are |
 | materialize | **0** | `[A]` A pg_cron job calling a SQL function consumes no Edge Function invocation |
 | **Total** | **≈ 46,100 of 500,000** `[V]` | ≈ 9% of the free monthly allowance |
 
 Cloudflare side: ≈ 2,880 requests/month against `[V]` 100,000/day, using 1 of `[V]` 5 free cron
 triggers, and the Worker stays trivial because of the `[V]` 10 ms CPU ceiling.
 
-`[?]` Whether a pg_cron job that invokes an Edge Function over `pg_net` counts as one Edge
-invocation per fire is unverified. If it does, the figures above already assume it. If pg_cron
-itself also consumes something countable, the budget needs re-checking.
+~~`[?]` Whether a pg_cron job that invokes an Edge Function over `pg_net` counts as one Edge
+invocation per fire is unverified.~~ **Moot under ADR-017:** no clock reaches an Edge Function
+through `pg_net` any more. The three Edge-invoking clocks fire from Cloudflare, where each fire is
+plainly one invocation, and `materialize` calls a SQL function and invokes nothing.
 
 **First lever if invocations ever tighten** (multi-tenant scale): move `publish` to `*/5` and widen
 the claim window. That costs slot precision, which is why it is not the default.
@@ -733,7 +750,7 @@ ADR-009, ADR-014, §5 free-tier table · `DATABASE.md` §4 (`publish_jobs`, `sch
 
 | Item | Gates |
 |---|---|
-| `[?]` pg_cron and pg_net available on the free plan | §2 entirely |
+| ~~`[?]` pg_cron and pg_net available on the free plan~~ — **resolved `[V] 2026-10-22`**, both installed; see `DATABASE.md` §10 and ADR-015 for the consequence | §2 no longer gated |
 | `[?]` Edge Function execution limit | §6.1 batch size |
 | `[?]` Whether an Edge Function's database client supports an explicit transaction (`ARCHITECTURE.md` §9 Q10) | `[F]` J8's atomic finalize |
 | `[?]` PostgreSQL 15+ | Already gates the first migration |
@@ -764,7 +781,9 @@ ADR-009, ADR-014, §5 free-tier table · `DATABASE.md` §4 (`publish_jobs`, `sch
 | D8 | Verification as a pre-pass or its own clock | **Open** | Pre-pass — ordering guarantee, zero extra invocations |
 | D9 | **Alert channel** | `[D]` **Approved in direction: email, with the dashboard badge as a supplement only.** Provider, sender setup, $0 tier suitability and deliverability all remain `[?]` | **Gate:** unattended S2 publishing stays disabled until the channel is configured and end-to-end delivery is verified by a test alert the owner confirms receiving (§12.3) |
 | D10 | Materialize for `paused` orgs? | **Open** | Yes; the publisher skips them |
-| D11 | Materialization as a Postgres function rather than an Edge Function | **Open** | Postgres function — pure SQL, zero invocations, one less runtime in the critical path |
+| D11 | Materialization as a Postgres function rather than an Edge Function | `[D]` **RESOLVED 2026-10-22** — Postgres function. ADR-015 turned this from a preference into the only option for anything that must not carry a credential | Pure SQL, zero invocations, one less runtime in the critical path |
+| D12 | **Which clock runs where** | `[D]` **RESOLVED 2026-10-22** — ADR-017. `publish`, `generate` and `health` fire from Cloudflare Worker cron; `pg_cron` keeps only `materialize` and the overdue detector, neither of which makes an outbound call | Forced by ADR-015: `pg_net` stores the `Authorization` header in a table PUBLIC can read and that cannot be closed |
+| D13 | **Who watches the primary clock** | **Open** — created by D12 | ADR-003's independence is largely spent now that Cloudflare runs three of the four clocks. An in-database overdue detector records lateness but cannot reach out. A genuinely independent watch needs a third free observer; none chosen |
 
 ---
 

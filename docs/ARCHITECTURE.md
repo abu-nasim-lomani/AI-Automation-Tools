@@ -325,6 +325,10 @@ the "user activity" that prevents a pause.
 `[A]` should prevent inactivity pause — this assumption must be validated by observation during
 S2, not trusted. Cost: one more platform, and `[V]` the free Worker CPU ceiling is 10 ms per
 invocation, so the Worker must stay trivial.
+**Superseded in part by ADR-017 `[D]` 2026-10-22.** The Worker is no longer only a watchdog: it
+also fires the `publish` and `generate` clocks, because ADR-015 made it unsafe for `pg_net` to carry
+the credential those calls need. The independence this ADR rests on is largely spent as a result;
+ADR-017 records what replaces it and what does not.
 **Revisit when.** Observation shows pausing still occurs, or the watchdog needs real logic.
 
 ### ADR-004 — Next.js now, Vite SPA as the escape hatch `[?]` OPEN
@@ -540,6 +544,39 @@ which database. Printing nothing would make the approval ceremonial.
 **Revisit when.** The repository is made private — the reviewer gate dies with it and Gate 2 would
 have to carry the weight — or a production project exists, at which point a single account-wide
 Supabase access token is no longer an acceptable way to reach both.
+
+---
+
+### ADR-017 — The work clock moves to Cloudflare; pg_cron keeps only the network-free jobs
+**Context.** `docs/JOBS_AND_SCHEDULING.md` §2 has four clocks. Two of them — `publish` every minute
+and `generate` daily — reach an Edge Function through `pg_cron` calling `pg_net`. Invoking an Edge
+Function requires an `Authorization` header, and ADR-015 establishes that the header is stored in
+`net.http_request_queue`, which PUBLIC can read and which cannot be closed from the `postgres` role.
+Those two clocks therefore cannot be built as specified. `materialize` was already a pure SQL
+function with no outbound call `[P]`, and `health` was already external, so both are unaffected.
+**Options.** (A) move the `publish` and `generate` triggers to the Cloudflare Worker's cron;
+(B) keep `pg_net` but invoke with `verify_jwt = false`, making the functions safe by their own
+design rather than by authenticating the caller; (C) keep `pg_net` and accept the exposure.
+**Decision.** **(A).** `[D]` `pg_net` leaves the critical path entirely, so ADR-015's constraint is
+satisfied structurally rather than by remembering it. Secrets live in Cloudflare Workers secrets and
+never enter the database. Within free limits: three of `[V]` five cron triggers, about 46,100
+requests a month against `[V]` 100,000 a day, and a Worker that still only forwards a request, well
+inside the `[V]` 10 ms CPU ceiling. Cost stays $0.
+**Why (B) was rejected.** It is sound on its own terms — a function that only claims jobs whose
+`scheduled_at` has passed, under a lease, does the right thing whoever calls it — but it leaves the
+endpoint open to being hammered, and every call spends from the `[V]` 500,000 monthly Edge
+invocation allowance. A control that an outsider can drain is not a control.
+**Consequences, including the one that hurts.** ADR-003 chose Cloudflare precisely as an
+*independent* observer, on the reasoning that a scheduler cannot detect its own death. Making it the
+primary clock spends that independence: if Cloudflare stops, publishing stops **and** nothing raises
+an alarm. The partial compensation is an in-database overdue detector — pure SQL on `pg_cron`, no
+network — that records lateness for whoever next asks. It cannot reach out on its own.
+Stated plainly: with two vendors and a $0 budget, the clock can live in Supabase with an external
+watchdog, or in Cloudflare with an internal detector. ADR-015 closed the first option. A genuinely
+independent watch over the primary clock needs a third party, which is `[?]` an open decision, not
+something this ADR settles.
+**Revisit when.** Supabase closes the `net` grants, which would reopen (A) versus the original
+design; or a third free observer is chosen; or Worker cron proves unreliable in S2 observation.
 
 ---
 
