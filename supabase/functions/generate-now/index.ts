@@ -96,7 +96,7 @@ Deno.serve(async (req) => {
         // UNAVAILABLE for everyone on the free tier, while the lite line has far
         // more free capacity. The stored model is overridden only for this
         // on-demand sample path.
-        const model = c.provider === "gemini" ? "gemini-2.0-flash-lite" : c.model;
+        const model = c.provider === "gemini" ? "gemini-2.0-flash" : c.model;
         attempts.push({ provider: c.provider, model, apiKey: key });
       } catch { /* skip an undecryptable credential */ }
     }
