@@ -31,7 +31,7 @@ export function AiKeyCard({ orgId }: { orgId: string }) {
       const { masked_hint } = await writeKey({
         orgId,
         provider: "gemini",
-        model: "gemini-flash-latest",
+        model: "gemini-2.0-flash-lite",
         tier: "unpaid",
         apiKey: apiKey.trim(),
       });
