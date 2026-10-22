@@ -472,7 +472,8 @@ everything in §13 remains unresolved.
 
 ## 15. Blocker status
 
-`[D] 2026-10-20` **A2 is closed. D6 is decided. The publish blocker remains ACTIVE.**
+`[D] 2026-10-20` A2 is closed. D6 is decided.
+`[D] 2026-10-23` **The publish blocker is now LIFTED** by ADR-018 (the transport-retry item below).
 
 `[K12 D-10]` The distinction matters: **this blocker was never going to be lifted by discovery.**
 No further reading will produce a Meta guarantee that an error response means no post was created
@@ -488,9 +489,26 @@ Resolved:
 - Q1 no longer gates anything: §6 routes **all** 506s to verification, so the under-specified
   "consecutive duplicates" semantics can stay open safely.
 
-**Still blocking implementation — one item:**
+**The last blocking item is now resolved `[D] 2026-10-23` — see `ARCHITECTURE.md` ADR-018.**
 
-`[?]` **Zero transport-level HTTP retries are not technically verified.** Decisions 7, 11, 12 and
-the §5.6 invariant all rest on one attempt meaning one request. Until that is demonstrated on the
-chosen client, the publish path must not be built, and a client that cannot guarantee it must not
-be used for publishing.
+`[V] 2026-10-23` The question "do zero transport-level HTTP retries hold on the chosen client?" was
+answered, and the answer is **no for the default client**: Deno's `fetch` transparently resends a
+POST on a connection reset after the request is accepted (`denoland/deno#35610`), retries stale
+pooled connections (`denoland/deno#32566`), and inherits `hyper-util`'s `retry_canceled_requests`
+resend on reused connections (`reqwest#3110`). The naïve client therefore cannot be used for
+publishing, exactly as this section warned.
+
+ADR-018 lifts the blocker by **deciding** the path rather than discovering a guarantee that does not
+exist (the same move as `[K12 D-10]`):
+
+1. The publish POST is issued through a **non-pooling** HTTP client, which removes the two
+   connection-reuse resends. No retry is configured anywhere on the publish path.
+2. The one residual case — accept-then-reset — is left to the defence that already exists: `[F]` R4
+   → `needs_verification`, Meta's 506 on an identical consecutive post (§6), and read-back
+   verification reconciling to the single post that exists.
+
+`[?]` **Still true, and now recorded as a standing property rather than a blocker:** the mitigation
+makes a double-send unlikely, not impossible (no idempotency key exists — §3), so at-most-once stays
+an application-level property (`SECURITY.md` R-A10, `[K22]`). The practical consequence is that
+read-back verification is load-bearing for correctness, which raises the priority of where an
+`unresolved` job surfaces (`ARCHITECTURE.md` §9 Q11).

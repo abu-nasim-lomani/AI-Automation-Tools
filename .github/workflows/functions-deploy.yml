@@ -25,6 +25,7 @@ on:
           - generate
           - write-credential
           - generate-now
+          - write-social-account
       confirm:
         description: 'Type exactly: deploy'
         required: true
