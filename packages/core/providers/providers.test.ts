@@ -221,7 +221,7 @@ test("retry: a transient failure is retried in place, then succeeds", async () =
     { prompt: "hi" },
     [{ provider: "gemini", model: "m", apiKey: "AIza-EXAMPLE-NOT-REAL" }],
     fetchImpl,
-    { retryBaseMs: 1 },
+    { retryBaseMs: 1, maxRetries: 2 },
   );
   assert.equal(out.text, "ok after retry");
   assert.equal(n, 3);

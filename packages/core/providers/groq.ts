@@ -55,6 +55,7 @@ export function createGroqProvider(fetchImpl: FetchLike = fetch): TextProvider {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
           body: JSON.stringify(body),
+          signal: AbortSignal.timeout(15000),
         });
       } catch (e) {
         throw new ProviderError(`groq request failed: ${(e as Error).message}`, {
