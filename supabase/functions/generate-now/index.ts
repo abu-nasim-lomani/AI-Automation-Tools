@@ -54,9 +54,11 @@ async function geminiModels(apiKey: string): Promise<string[]> {
 // through to the next instead of failing the whole request.
 function rankGeminiModels(names: string[]): string[] {
   const bad = /(image|vision|tts|audio|embedding|aqa|learnlm|robot|gemma|deep-research|antigravity|argon|preview|exp)/i;
+  // Concrete names first: the "-latest" aliases are listed by this key but can
+  // 404 on generateContent, so they are only a last resort.
   const prefer = [
-    "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite",
-    "gemini-flash-lite-latest", "gemini-2.0-flash",
+    "gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash",
+    "gemini-flash-latest", "gemini-flash-lite-latest",
   ];
   const ranked: string[] = [];
   const add = (n: string) => { if (n && !ranked.includes(n)) ranked.push(n); };
@@ -151,15 +153,31 @@ Deno.serve(async (req) => {
     }
     if (attempts.length === 0) return json({ ok: false, error: "no usable AI key for this workspace" }, 400);
 
-    let draft;
-    try {
-      // One short call, no critic, no regeneration — the lightest possible use
-      // of the free quota for an on-demand sample the owner will review anyway.
-      draft = await generateDraft({
-        voice: ctx.voice, topic: ctx.topic, attempts,
-        skipCritic: true, maxOutputTokens: 2048, maxRegenerations: 0,
-      });
-    } catch (e) {
+    // Try the candidate models one at a time. A 404 (that model is not callable
+    // on this key, even though it is listed) or a 503 (that model is momentarily
+    // busy) falls through to the next model rather than failing the whole
+    // sample. A key or quota problem stops at once — another model will not fix
+    // it. Each call is short, no critic, no regeneration: the lightest use of
+    // the free quota for an on-demand sample the owner reviews anyway.
+    let draft: Awaited<ReturnType<typeof generateDraft>> | undefined;
+    let lastErr: unknown;
+    for (const a of attempts) {
+      try {
+        draft = await generateDraft({
+          voice: ctx.voice, topic: ctx.topic, attempts: [a],
+          skipCritic: true, maxOutputTokens: 2048, maxRegenerations: 0,
+        });
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (e instanceof ProviderError && (e.status === 404 || e.errorClass === "transient")) {
+          continue; // not callable here, or busy — try the next model
+        }
+        break; // auth / invalid / quota / rate_limited / blocked — stop
+      }
+    }
+    if (!draft) {
+      const e = lastErr;
       if (e instanceof ProviderError) {
         if (e.errorClass === "auth" || e.errorClass === "invalid") {
           return json({ ok: false, error: "the AI key was rejected — check it is a valid Gemini key" }, 400);
@@ -167,15 +185,12 @@ Deno.serve(async (req) => {
         if (e.errorClass === "rate_limited" || e.errorClass === "quota") {
           return json({ ok: false, error: "Gemini's free quota is busy right now — wait a minute (or until the daily limit resets) and try again" }, 429);
         }
-        // A 404 means the model name is not on this key. Report what the key
-        // DOES offer, so the cause (wrong key, or no flash model) is visible.
         if (e.status === 404) {
           const offer = geminiAvailable.length
             ? geminiAvailable.slice(0, 10).join(", ")
             : "(the key returned no model list)";
-          return json({ ok: false, error: `model not found on this key — it offers: ${offer}` }, 400);
+          return json({ ok: false, error: `none of the tried models were callable on this key — it offers: ${offer}` }, 400);
         }
-        // Surface the provider's own message/status so the cause is visible.
         const bits = [
           `provider ${e.errorClass}`,
           e.status ? `http ${e.status}` : null,
