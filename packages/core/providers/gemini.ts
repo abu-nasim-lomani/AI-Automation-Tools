@@ -40,11 +40,18 @@ export function createGeminiProvider(fetchImpl: FetchLike = fetch): TextProvider
   return {
     name: "gemini",
     async generate(input: GenerateInput, apiKey: string): Promise<GenerateOutput> {
+      // The 2.5+/3.x flash models "think" before answering, which is slow and
+      // can spend the whole output budget before any post text is produced.
+      // For a short social post we do not need it, so switch it off on the flash
+      // models that support a zero budget (not 2.0/1.5 flash, which reject the
+      // field, and not pro, which requires a non-zero budget).
+      const disableThinking = /flash/i.test(input.model) && !/(2\.0|1\.5)/.test(input.model);
       const body: Record<string, unknown> = {
         contents: [{ role: "user", parts: [{ text: input.prompt }] }],
         generationConfig: {
           ...(input.temperature !== undefined ? { temperature: input.temperature } : {}),
           ...(input.maxOutputTokens !== undefined ? { maxOutputTokens: input.maxOutputTokens } : {}),
+          ...(disableThinking ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
         },
       };
       if (input.system) body.systemInstruction = { parts: [{ text: input.system }] };
@@ -55,9 +62,9 @@ export function createGeminiProvider(fetchImpl: FetchLike = fetch): TextProvider
           method: "POST",
           headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
           body: JSON.stringify(body),
-          // Fail fast if the provider hangs, so the Edge Function does not run
-          // past its wall-clock limit (a 546) waiting on a stalled response.
-          signal: AbortSignal.timeout(15000),
+          // Give a thinking-capable model room to answer, but still bound the
+          // wait so the Edge Function does not run past its wall-clock limit.
+          signal: AbortSignal.timeout(45000),
         });
       } catch (e) {
         // A network-level failure: no response at all.
