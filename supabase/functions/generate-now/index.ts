@@ -48,17 +48,22 @@ async function geminiModels(apiKey: string): Promise<string[]> {
   }
 }
 
-// Prefer a cheap, stable text flash model; fall back to any usable flash, then
-// any text model the key has. Skips image/tts/embedding/experimental variants.
-function pickGeminiModel(names: string[]): string | null {
+// Rank the key's usable text models best-first: preferred stable flash names,
+// then any other flash, then any text model. Skips image/tts/embedding/
+// experimental variants. Returning several lets a 503 on one busy model fall
+// through to the next instead of failing the whole request.
+function rankGeminiModels(names: string[]): string[] {
   const bad = /(image|vision|tts|audio|embedding|aqa|learnlm|robot|gemma|deep-research|antigravity|argon|preview|exp)/i;
   const prefer = [
     "gemini-flash-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite",
     "gemini-flash-lite-latest", "gemini-2.0-flash",
   ];
-  for (const p of prefer) if (names.includes(p)) return p;
-  const flash = names.find((n) => /flash/i.test(n) && !bad.test(n));
-  return flash ?? names.find((n) => !bad.test(n)) ?? names[0] ?? null;
+  const ranked: string[] = [];
+  const add = (n: string) => { if (n && !ranked.includes(n)) ranked.push(n); };
+  for (const p of prefer) if (names.includes(p)) add(p);
+  for (const n of names) if (/flash/i.test(n) && !bad.test(n)) add(n);
+  for (const n of names) if (!bad.test(n)) add(n);
+  return ranked;
 }
 
 interface Credential {
@@ -131,14 +136,17 @@ Deno.serve(async (req) => {
           keyring, { orgId: ctx.org_id, credentialId: c.id },
           { ciphertext: b64(c.ciphertext), iv: b64(c.iv), keyVersion: c.key_version },
         );
-        let model = c.model;
         if (c.provider === "gemini") {
-          // Pick from THIS key's own model list, so the name is one it has.
+          // Pick from THIS key's own model list, so every name is one it has.
+          // Queue the top few so a 503 on one busy model falls to the next.
           const names = await geminiModels(key);
           if (names.length > 0) geminiAvailable = names;
-          model = pickGeminiModel(names) ?? "gemini-flash-latest";
+          const ranked = rankGeminiModels(names);
+          const models = ranked.length > 0 ? ranked.slice(0, 3) : ["gemini-flash-latest"];
+          for (const m of models) attempts.push({ provider: "gemini", model: m, apiKey: key });
+        } else {
+          attempts.push({ provider: c.provider, model: c.model, apiKey: key });
         }
-        attempts.push({ provider: c.provider, model, apiKey: key });
       } catch { /* skip an undecryptable credential */ }
     }
     if (attempts.length === 0) return json({ ok: false, error: "no usable AI key for this workspace" }, 400);
