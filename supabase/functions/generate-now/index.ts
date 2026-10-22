@@ -170,10 +170,17 @@ Deno.serve(async (req) => {
         break;
       } catch (e) {
         lastErr = e;
-        if (e instanceof ProviderError && (e.status === 404 || e.errorClass === "transient")) {
-          continue; // not callable here, or busy — try the next model
+        // Free-tier quota is per-model, so a 429 on one model does not mean the
+        // next is spent. Fall through on not-callable (404), busy (503) and
+        // quota/rate limits alike; only a key or a blocked prompt stops the run.
+        if (
+          e instanceof ProviderError &&
+          (e.status === 404 || e.errorClass === "transient" ||
+            e.errorClass === "rate_limited" || e.errorClass === "quota")
+        ) {
+          continue; // try the next model
         }
-        break; // auth / invalid / quota / rate_limited / blocked — stop
+        break; // auth / invalid / blocked — another model will not help
       }
     }
     if (!draft) {
