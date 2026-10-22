@@ -26,6 +26,8 @@ on:
           - write-credential
           - generate-now
           - write-social-account
+          - publish
+          - publish-now
       confirm:
         description: 'Type exactly: deploy'
         required: true
