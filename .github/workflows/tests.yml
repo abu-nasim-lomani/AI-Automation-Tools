@@ -58,3 +58,4 @@ jobs:
           packages/core/crypto/envelope.test.ts
           packages/core/providers/providers.test.ts
           packages/core/content/content.test.ts
+          packages/core/content/generate.test.ts
