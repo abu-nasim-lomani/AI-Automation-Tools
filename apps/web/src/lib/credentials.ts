@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.ts";
+import { invokeEdge } from "./invoke.ts";
 
 // Column-restricted by grant: the ciphertext is never selectable (SEC-16).
 export interface Credential {
@@ -35,16 +36,12 @@ export interface WriteKeyInput {
  * function and is never stored or logged here.
  */
 export async function writeKey(input: WriteKeyInput): Promise<{ masked_hint: string }> {
-  const { data, error } = await supabase!.functions.invoke("write-credential", {
-    body: {
-      org_id: input.orgId,
-      provider: input.provider,
-      model: input.model,
-      tier: input.tier,
-      api_key: input.apiKey,
-    },
+  const data = await invokeEdge<{ masked_hint: string }>("write-credential", {
+    org_id: input.orgId,
+    provider: input.provider,
+    model: input.model,
+    tier: input.tier,
+    api_key: input.apiKey,
   });
-  if (error) throw error;
-  if (!data?.ok) throw new Error(data?.error ?? "could not store the key");
-  return { masked_hint: data.masked_hint as string };
+  return { masked_hint: data.masked_hint };
 }
