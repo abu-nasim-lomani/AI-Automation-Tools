@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
   await client.connect();
   try {
     const res = await client.queryObject<{ id: string }>(
-      "select app.write_provider_credential($1,$2,$3,$4::provider_kind,$5,$6::credential_tier,$7,$8,$9,$10) as id",
+      "select app.write_provider_credential($1::uuid,$2::uuid,$3::uuid,$4::provider_kind,$5,$6::credential_tier,$7,$8,$9,$10) as id",
       [
         credentialId, actor, orgId, provider, model, tier,
         sealed.ciphertext, sealed.iv, keyVersion, sealed.maskedHint,

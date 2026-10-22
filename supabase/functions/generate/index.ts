@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
       provider: draft.provider,
     };
     const rec = await client.queryObject<{ id: string }>(
-      "select app.record_generation($1,$2,$3,$4,$5,$6,$7,$8::numeric," +
+      "select app.record_generation($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8::numeric," +
         "$9::provider_kind,$10,$11,$12::jsonb) as id",
       [
         ctx.org_id, ctx.topic.id, ctx.voice.id, draft.body,

@@ -77,7 +77,7 @@ Deno.serve(async (req) => {
     if ((member.rows[0]?.n ?? 0) === 0) return json({ ok: false, error: "not a member of this workspace" }, 403);
 
     const picked = await client.queryObject<{ j: Context | null }>(
-      "select app.generation_context_for($1) as j", [orgId],
+      "select app.generation_context_for($1::uuid) as j", [orgId],
     );
     const ctx = picked.rows[0]?.j;
     if (!ctx) return json({ ok: false, error: "add a topic and an AI key first" }, 400);
@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
     const c = draft.counts;
     const rec = await client.queryObject<{ id: string }>(
-      "select app.record_generation($1,$2,$3,$4,$5,$6,$7,$8::numeric,$9::provider_kind,$10,$11,$12::jsonb) as id",
+      "select app.record_generation($1::uuid,$2::uuid,$3::uuid,$4,$5,$6,$7,$8::numeric,$9::provider_kind,$10,$11,$12::jsonb) as id",
       [
         ctx.org_id, ctx.topic.id, ctx.voice.id, draft.body,
         c.grapheme_count, c.codepoint_count, c.word_count, c.bangla_ratio,
