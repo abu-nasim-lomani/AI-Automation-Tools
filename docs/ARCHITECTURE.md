@@ -580,6 +580,57 @@ design; or a third free observer is chosen; or Worker cron proves unreliable in 
 
 ---
 
+### ADR-018 — The publish POST runs on a non-pooling client; at-most-once stays an application property
+
+**Status.** `[D] 2026-10-23`. Lifts the `API_INTEGRATIONS.md` §15 blocker.
+
+**Context.** `API_INTEGRATIONS.md` §15 held one item blocking the publish path: *"Zero
+transport-level HTTP retries are not technically verified."* Decisions 7, 11, 12 and the §5.6
+marker invariant all rest on **one attempt meaning one network request**. The chosen runtime is
+Deno (Supabase Edge Functions), so the question is what Deno's `fetch` does on a connection-level
+failure of a non-idempotent POST.
+
+**Finding — the hazard is real, not theoretical `[V] 2026-10-23`.**
+- Deno's `fetch` **transparently resends a POST** when a server accepts the request and then resets
+  the connection: the server receives it twice, where Node sends it once
+  (`github.com/denoland/deno/issues/35610`).
+- Deno retries on **stale pooled HTTP/1.1 connections** (`github.com/denoland/deno/pull/32566`) —
+  bounded to one extra attempt, for requests with clonable bodies.
+- The underlying `hyper-util` default `retry_canceled_requests = true` **silently resends on a
+  reused pooled connection**, and the documented way to prevent it is to **not reuse pooled
+  connections** (`github.com/seanmonstar/reqwest/issues/3110`).
+
+So the naïve default client can send a publish POST twice. Building the publish path on it would
+break R4.
+
+**Decision.**
+1. The publish POST is issued through a **non-pooling HTTP client** — Deno's `createHttpClient`
+   with connection reuse disabled `[A]` (confirm the exact option, e.g. `poolMaxIdlePerHost: 0`, at
+   wiring time) — which removes the stale-pooled-connection resend and the `hyper-util` canceled
+   resend, the two cases that reuse a connection.
+2. **No retry is configured anywhere on the publish path** — not in the client, not in the adapter,
+   not in the job runner. The `packages/core` Meta adapter stays portable (it takes a `FetchLike`
+   and touches no Deno API); the Edge Function is the only place that binds the non-pooling client.
+3. The **residual** case — a POST accepted and then reset mid-response — can still deliver twice at
+   the network layer. This is handled by the defence that already exists for ambiguity, not by
+   preventing the send: `[F]` R4 routes any transport failure to `needs_verification`, Meta rejects
+   an identical consecutive post with error **506** (`API_INTEGRATIONS.md` §6), and the read-back
+   verification reconciles to the one post that exists.
+
+**Consequences, including the one that hurts.** The mitigation makes a double-send *unlikely*, not
+*impossible* — TCP cannot promise exactly-once to an endpoint with no idempotency key, which Meta
+does not provide (§3). So **at-most-once remains an application-level property, never a guarantee**
+(`SECURITY.md` R-A10, `[K22]`) — the decision is consistent with that, not a walk-back of it. The
+cost is that **read-back verification is now load-bearing for correctness**, not only for timeouts:
+it is the thing that makes a residual double-delivery converge to one recorded post. That raises the
+importance of open question 11 (where `unresolved` surfaces) and of ADR-009's escalation path.
+
+**Revisit when.** Deno documents a supported way to disable *all* POST resends; or the runtime's
+connection handling changes; or Meta publishes an idempotency key, which would let `published` rest
+on `[V]` instead of on verification.
+
+---
+
 ## 7. Rejected alternatives, briefly
 
 | Rejected | Reason |
