@@ -63,9 +63,12 @@ Deno.serve(async (req) => {
   try { keyring = keyringFromEnv(Deno.env.toObject(), [1, 2]); }
   catch { return json({ ok: false, error: "master key not configured" }, 500); }
 
+  // Everything below is wrapped so ANY unhandled error returns a readable JSON
+  // (with CORS) instead of crashing the worker — a crash reaches the browser as
+  // the opaque "Failed to send a request to the Edge Function".
   const client = new Client(dbUrl);
-  await client.connect();
   try {
+    await client.connect();
     // The caller must be a member of the org they are generating for.
     const member = await client.queryObject<{ n: number }>(
       "select count(*)::int as n from public.memberships where org_id = $1 and user_id = $2",
@@ -122,6 +125,9 @@ Deno.serve(async (req) => {
       provider: draft.provider,
       body: draft.body,
     });
+  } catch (e) {
+    // Surface the cause instead of letting the worker crash.
+    return json({ ok: false, error: "generate failed: " + ((e as Error).message ?? "unknown") }, 500);
   } finally {
     await client.end();
   }
