@@ -71,8 +71,8 @@ Deno.serve(async (req) => {
   }
 
   const client = new Client(dbUrl);
-  await client.connect();
   try {
+    await client.connect();
     const picked = await client.queryObject<{ j: Context | null }>(
       "select app.pick_generation_context() as j",
     );
@@ -145,6 +145,8 @@ Deno.serve(async (req) => {
       attempt: draft.attempt,
       provider: draft.provider,
     });
+  } catch (e) {
+    return json({ ok: false, generated: false, error: "generate failed: " + ((e as Error).message ?? "unknown") }, 500);
   } finally {
     await client.end();
   }
