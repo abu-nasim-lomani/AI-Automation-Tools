@@ -391,9 +391,39 @@ publishing, and `ARCHITECTURE.md` ADR-008 `[F]` decouples the two through the bu
 unspecified provider error contract cannot cause a bad publish. The publish path was the blocker;
 generation is not.
 
-`[?]` Q7: a provider section is needed before the generation path is built, covering at minimum
+~~`[?]` Q7: a provider section is needed before the generation path is built, covering at minimum
 quota-exhaustion responses, retryable vs terminal errors, and the documented free-tier rate-limit
-behaviour of each provider.
+behaviour of each provider.~~ **Addressed in code `[V] 2026-10-22`,** `packages/core/providers/`.
+
+### 12.1 Provider contract, as implemented
+
+One adapter interface, two implementations (Gemini primary, Groq fallback). The adapter holds no
+key; the org's key is passed per call. Contracts checked against vendor docs on 2026-10-22
+(`ai.google.dev`, `console.groq.com`).
+
+| Provider | Endpoint | Auth | Success text at |
+|---|---|---|---|
+| Gemini | `POST …/v1beta/models/{model}:generateContent` | `x-goog-api-key` header | `candidates[0].content.parts[].text` |
+| Groq | `POST api.groq.com/openai/v1/chat/completions` | `Authorization: Bearer` | `choices[0].message.content` |
+
+Failures are normalised to one of seven classes, which is what the generation job reacts to:
+
+| Class | Meaning | Job reaction |
+|---|---|---|
+| `auth` | key invalid / permission denied (401, 403) | surface to the owner; do not retry |
+| `quota` | free-tier or spend exhausted (402, Groq 498) | nothing more this run |
+| `rate_limited` | throttle (429) — honours `retry-after` | retry with backoff |
+| `transient` | 5xx / network | retry with backoff |
+| `invalid` | a request WE built was rejected (400 INVALID_ARGUMENT / invalid_request_error) | a bug; never retry blindly |
+| `blocked` | safety refusal (200 + blockReason, or empty text) | terminal for this prompt |
+| `terminal` | anything else, incl. Gemini 400 FAILED_PRECONDITION (free tier not available in country) | non-retryable |
+
+`generateWithFallback` tries each credential in order and falls through **only** on a retryable
+class (`quota`, `rate_limited`, `transient`); `auth`, `invalid` and `blocked` are surfaced at once,
+because a different provider does not fix a bad key or a blocked prompt. `[A]` Free-tier RPM/TPM/RPD
+figures are deliberately not encoded — Google publishes none and they are visible per project in AI
+Studio only (CLAUDE.md §5); the adapter reacts to the 429 it receives rather than to a predicted
+limit. 16 unit tests, all fetches mocked, no live call.
 
 ---
 
