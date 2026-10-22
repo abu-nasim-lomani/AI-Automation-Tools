@@ -101,10 +101,20 @@ Deno.serve(async (req) => {
     try {
       draft = await generateDraft({ voice: ctx.voice, topic: ctx.topic, attempts });
     } catch (e) {
-      const cls = e instanceof ProviderError ? e.errorClass : "transient";
-      // An auth class almost always means the stored key is wrong.
-      const hint = cls === "auth" ? "the AI key was rejected — check it is a valid Gemini key" : `provider ${cls}`;
-      return json({ ok: false, error: hint }, 400);
+      if (e instanceof ProviderError) {
+        if (e.errorClass === "auth" || e.errorClass === "invalid") {
+          return json({ ok: false, error: "the AI key was rejected — check it is a valid Gemini key" }, 400);
+        }
+        // Surface the provider's own message/status so the cause is visible.
+        const bits = [
+          `provider ${e.errorClass}`,
+          e.status ? `http ${e.status}` : null,
+          e.providerCode ?? null,
+          e.message,
+        ].filter(Boolean).join(" · ");
+        return json({ ok: false, error: bits }, 400);
+      }
+      return json({ ok: false, error: "provider error: " + ((e as Error).message ?? "unknown") }, 400);
     }
 
     const c = draft.counts;
