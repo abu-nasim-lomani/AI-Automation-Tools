@@ -52,6 +52,7 @@ HARNESS=(supabase/tests/harness/00_auth_shim.sql
          supabase/migrations/20261022300000_context_newest_credential.sql
          supabase/migrations/20261023000000_write_social_account.sql
          supabase/migrations/20261023010000_publish_transitions.sql
+         supabase/migrations/20261023020000_manual_publish.sql
          supabase/tests/harness/10_assert.sql
          supabase/tests/harness/20_seed.sql)
 SUITES=(supabase/tests/suites/sec_01_cross_tenant.sql
@@ -62,6 +63,7 @@ SUITES=(supabase/tests/suites/sec_01_cross_tenant.sql
         supabase/tests/suites/jobs_07_claim.sql
         supabase/tests/suites/jobs_08_finalize.sql
         supabase/tests/suites/jobs_09_publish_transitions.sql
+        supabase/tests/suites/jobs_10_manual_publish.sql
         supabase/tests/suites/gen_01_generation_functions.sql
         supabase/tests/suites/org_01_create_org.sql
         supabase/tests/suites/cred_01_write_credential.sql
