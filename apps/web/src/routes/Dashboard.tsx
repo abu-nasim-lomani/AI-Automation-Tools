@@ -3,6 +3,7 @@ import { AiKeyCard } from "../components/AiKeyCard.tsx";
 import { TopicsCard } from "../components/TopicsCard.tsx";
 import { FacebookPageCard } from "../components/FacebookPageCard.tsx";
 import { DraftsCard } from "../components/DraftsCard.tsx";
+import { PublishingBanner } from "../components/PublishingBanner.tsx";
 
 // Placeholder dashboard content, inside the shell. The real tiles (buffer,
 // today's queue, quota) arrive with the content screens.
@@ -14,6 +15,8 @@ export function Dashboard({ org, email }: { org: Org; email: string }) {
         Workspace <strong>{org.name}</strong> · signed in as {email}. Automation is paused until you
         finish setup and arm it.
       </p>
+
+      <PublishingBanner orgId={org.id} />
 
       <AiKeyCard orgId={org.id} />
       <TopicsCard orgId={org.id} />

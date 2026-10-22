@@ -46,3 +46,13 @@ export async function killSwitch(orgId: string): Promise<void> {
     .eq("org_id", orgId);
   if (error) throw error;
 }
+
+/** Resume after a pause (e.g. a configuration fault stopped publishing). The
+ *  same member-only surface as the emergency stop (org_settings_stop policy). */
+export async function resumePublishing(orgId: string): Promise<void> {
+  const { error } = await supabase!
+    .from("org_settings")
+    .update({ paused: false })
+    .eq("org_id", orgId);
+  if (error) throw error;
+}

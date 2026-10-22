@@ -35,6 +35,51 @@ function json(body: unknown, status = 200): Response {
 // What a Page token must be able to do to post. Stored so a later token-health
 // job (and the UI) can show it; CREATE_CONTENT is required by the DB write.
 const DEFAULT_TASKS = ["CREATE_CONTENT"];
+const GRAPH = "https://graph.facebook.com/v26.0";
+
+/**
+ * Check the token against the Graph API before storing it, so the common
+ * mistakes fail HERE (clearly) instead of at publish time (as an opaque code
+ * 200 that pauses the org). GET /me with a Page token returns the Page itself:
+ *   - a non-2xx means the token is invalid or expired;
+ *   - an id that is not the Page id means it is a User token, not the Page token;
+ *   - tasks without CREATE_CONTENT means it cannot post.
+ * The token goes in the Authorization header, never the URL.
+ */
+async function validatePageToken(
+  externalId: string,
+  token: string,
+): Promise<{ ok: true; tasks: string[] } | { ok: false; error: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`${GRAPH}/me?fields=id,name,tasks`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    return { ok: false, error: "could not reach Facebook to check the token — try again" };
+  }
+  if (!res.ok) {
+    return { ok: false, error: "the token is invalid or expired — generate a fresh Page token" };
+  }
+  let data: Record<string, unknown>;
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    return { ok: false, error: "unexpected response from Facebook — try again" };
+  }
+  if (String(data.id ?? "") !== externalId) {
+    return {
+      ok: false,
+      error: "this token is not for that Page — use the Page token from inside the me/accounts result, not the User token",
+    };
+  }
+  const tasks = Array.isArray(data.tasks) ? (data.tasks as unknown[]).map(String) : [];
+  if (tasks.length > 0 && !tasks.includes("CREATE_CONTENT")) {
+    return { ok: false, error: "this token cannot post — reconnect with pages_manage_posts granted" };
+  }
+  return { ok: true, tasks };
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -80,9 +125,12 @@ Deno.serve(async (req) => {
   }
 
   const grantedScopes = Array.isArray(body.granted_scopes) ? body.granted_scopes.map(String) : [];
-  const grantedTasks = Array.isArray(body.granted_tasks) && body.granted_tasks.length > 0
-    ? body.granted_tasks.map(String)
-    : DEFAULT_TASKS;
+
+  // Verify the token with Facebook before storing it, and take the real tasks
+  // from the Graph response rather than trusting the client.
+  const check = await validatePageToken(externalId, pageToken);
+  if (!check.ok) return json({ ok: false, error: check.error }, 400);
+  const grantedTasks = check.tasks.length > 0 ? check.tasks : DEFAULT_TASKS;
 
   let keyring;
   try {
