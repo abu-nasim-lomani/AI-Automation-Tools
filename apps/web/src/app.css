@@ -60,3 +60,32 @@ a { color: var(--primary); }
 
 /* An aria-live region for status announcements, visually present but subtle. */
 .live { font-size: var(--text-sm); color: var(--text-muted); min-height: 1.5em; }
+
+/* App shell navigation */
+.shell-nav {
+  display: flex; flex-direction: column; gap: 2px;
+  width: 220px; padding: var(--space-3); border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+.nav-item {
+  font: inherit; text-align: left; background: transparent; border: 0;
+  padding: 10px var(--space-3); border-radius: var(--radius-md); color: var(--text-muted);
+  min-height: 44px; cursor: pointer;
+}
+.nav-item:hover:not([disabled]) { background: var(--bg); color: var(--text); }
+.nav-item[disabled] { cursor: not-allowed; opacity: 0.7; }
+.nav-active { background: var(--primary-subtle); color: var(--primary); font-weight: var(--weight-medium); }
+
+.btn-danger { background: var(--danger); color: var(--danger-on); }
+
+/* Under 768px the sidebar becomes a horizontal, scrollable bottom tab bar. */
+@media (max-width: 768px) {
+  .shell-body { flex-direction: column; }
+  .shell-nav {
+    width: auto; flex-direction: row; overflow-x: auto; border-right: 0;
+    border-top: 1px solid var(--border); order: 2;
+    position: sticky; bottom: 0; background: var(--surface);
+  }
+  .nav-item { white-space: nowrap; }
+  main { order: 1; }
+}
