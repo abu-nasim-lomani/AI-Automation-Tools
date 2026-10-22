@@ -111,3 +111,18 @@ test("a generation auth failure propagates rather than becoming a draft", async 
     (e: unknown) => e instanceof ProviderError && e.errorClass === "auth",
   );
 });
+
+test("skipCritic: one call, no critic, accepted when layer 1 passes", async () => {
+  let criticCalls = 0;
+  const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const body = String(init?.body ?? "");
+    if (body.includes("fact-checker")) { criticCalls++; }
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "a clean short sample post body" }] } }] }), { status: 200 });
+  }) as unknown as FetchLike;
+  const d = await generateDraft(
+    { voice: VOICE, topic: TOPIC, attempts: GEMINI, skipCritic: true, maxOutputTokens: 400, maxRegenerations: 0 },
+    fetch);
+  assert.equal(d.accepted, true);
+  assert.equal(d.critique.layer, "ok");
+  assert.equal(criticCalls, 0); // the critic is never called
+});

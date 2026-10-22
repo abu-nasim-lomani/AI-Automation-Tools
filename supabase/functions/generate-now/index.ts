@@ -99,7 +99,12 @@ Deno.serve(async (req) => {
 
     let draft;
     try {
-      draft = await generateDraft({ voice: ctx.voice, topic: ctx.topic, attempts });
+      // One short call, no critic, no regeneration — the lightest possible use
+      // of the free quota for an on-demand sample the owner will review anyway.
+      draft = await generateDraft({
+        voice: ctx.voice, topic: ctx.topic, attempts,
+        skipCritic: true, maxOutputTokens: 400, maxRegenerations: 0,
+      });
     } catch (e) {
       if (e instanceof ProviderError) {
         if (e.errorClass === "auth" || e.errorClass === "invalid") {
