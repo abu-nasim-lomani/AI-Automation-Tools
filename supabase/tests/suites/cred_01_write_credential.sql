@@ -11,6 +11,7 @@ do $$
 declare v uuid;
 begin
   v := app.write_provider_credential(
+    gen_random_uuid(),
     'b0000000-0000-4000-8000-000000000002',          -- actor: Bob, owner of org B
     'bb000000-0000-4000-8000-00000000000b',          -- org B
     'gemini', 'gemini-flash-latest', 'unpaid',
@@ -41,6 +42,7 @@ select t.expect('CRED-1','a credential.written audit row is recorded',
 -- A non-owner actor is refused, even with the right org.
 select t.expect_denied('CRED-1','a non-owner actor is refused',
   $$select app.write_provider_credential(
+      gen_random_uuid(),
       'c0000000-0000-4000-8000-000000000003',        -- Carol: member of org A, not owner of B
       'bb000000-0000-4000-8000-00000000000b',
       'gemini','m','unpaid','\x01'::bytea,'\x000102030405060708090a0b'::bytea,1,'x')$$);
@@ -48,6 +50,7 @@ select t.expect_denied('CRED-1','a non-owner actor is refused',
 -- A bad IV length is refused by the column constraint.
 select t.expect_denied('CRED-1','a wrong-length iv is refused',
   $$select app.write_provider_credential(
+      gen_random_uuid(),
       'b0000000-0000-4000-8000-000000000002',
       'bb000000-0000-4000-8000-00000000000b',
       'gemini','m','unpaid','\x01'::bytea,'\x0001'::bytea,1,'x')$$);
@@ -57,6 +60,7 @@ set role authenticated;
 set request.jwt.claims = '{"sub":"b0000000-0000-4000-8000-000000000002"}';
 select t.expect_denied('CRED-1','authenticated cannot write a credential',
   $$select app.write_provider_credential(
+      gen_random_uuid(),
       'b0000000-0000-4000-8000-000000000002',
       'bb000000-0000-4000-8000-00000000000b',
       'gemini','m','unpaid','\x01'::bytea,'\x000102030405060708090a0b'::bytea,1,'x')$$);

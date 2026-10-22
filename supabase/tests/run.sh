@@ -47,6 +47,7 @@ HARNESS=(supabase/tests/harness/00_auth_shim.sql
          supabase/migrations/20261022250000_generation_functions.sql
          supabase/migrations/20261022260000_create_org.sql
          supabase/migrations/20261022270000_write_credential.sql
+         supabase/migrations/20261022280000_write_credential_id.sql
          supabase/tests/harness/10_assert.sql
          supabase/tests/harness/20_seed.sql)
 SUITES=(supabase/tests/suites/sec_01_cross_tenant.sql
@@ -104,7 +105,7 @@ drop function app.finalize_publish|drop function app.finalize_publish(uuid,text)
 drop function app.pick_generation_context|drop function app.pick_generation_context() cascade;
 drop function app.record_generation|drop function app.record_generation(uuid,uuid,uuid,text,int,int,int,numeric,provider_kind,text,text,jsonb) cascade;
 drop function app.create_org|drop function app.create_org(text) cascade;
-drop function app.write_provider_credential|drop function app.write_provider_credential(uuid,uuid,provider_kind,text,credential_tier,bytea,bytea,int,text) cascade;
+drop function app.write_provider_credential|drop function app.write_provider_credential(uuid,uuid,uuid,provider_kind,text,credential_tier,bytea,bytea,int,text) cascade;
 MUTATIONS
   echo "   all controls verified: removing any one of them breaks its suite"
 fi

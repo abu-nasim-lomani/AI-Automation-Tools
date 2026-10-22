@@ -1,4 +1,5 @@
 import type { Org } from "../lib/orgs.ts";
+import { AiKeyCard } from "../components/AiKeyCard.tsx";
 
 // Placeholder dashboard content, inside the shell. The real tiles (buffer,
 // today's queue, quota) arrive with the content screens.
@@ -10,6 +11,8 @@ export function Dashboard({ org, email }: { org: Org; email: string }) {
         Workspace <strong>{org.name}</strong> · signed in as {email}. Automation is paused until you
         finish setup and arm it.
       </p>
+
+      <AiKeyCard orgId={org.id} />
 
       <div className="card" style={{ marginTop: "var(--space-6)" }}>
         <h2 style={{ fontSize: "var(--text-lg)", margin: "0 0 var(--space-3)" }}>Finish setting up</h2>

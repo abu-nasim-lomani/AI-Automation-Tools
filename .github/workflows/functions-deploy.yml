@@ -15,6 +15,7 @@ on:
         type: choice
         options:
           - generate
+          - write-credential
       confirm:
         description: 'Type exactly: deploy'
         required: true
