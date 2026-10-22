@@ -1,0 +1,62 @@
+/* Base styles for the app, built only on the design tokens. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--leading-latin);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every Bangla node gets the Bengali face and its taller leading (DESIGN_SYSTEM §2.2). */
+[lang="bn"] { font-family: var(--font-bangla); line-height: var(--leading-bangla); }
+
+a { color: var(--primary); }
+
+.btn {
+  font: inherit;
+  font-weight: var(--weight-medium);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 10px var(--space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--motion-micro) var(--easing), box-shadow var(--motion-micro) var(--easing);
+}
+.btn-primary { background: var(--primary); color: var(--primary-on); }
+.btn-primary:hover { box-shadow: var(--elev-2); filter: brightness(1.05); }
+.btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+.btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.field label { display: block; font-size: var(--text-sm); font-weight: var(--weight-medium); margin-bottom: 6px; }
+.field input {
+  font: inherit; width: 100%; padding: 10px var(--space-3); min-height: 44px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text);
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--elev-1);
+}
+
+.centered { min-height: 100dvh; display: grid; place-items: center; padding: var(--space-4); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm);
+  font-weight: var(--weight-medium); padding: 4px 10px; border-radius: 999px; border: 1px solid;
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.pill-active { color: var(--success); background: var(--success-subtle); border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+.pill-paused { color: var(--warning); background: var(--warning-subtle); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+.pill-attention { color: var(--danger); background: var(--danger-subtle); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+
+.muted { color: var(--text-muted); }
+.subtle { color: var(--text-subtle); font-size: var(--text-sm); }
+
+/* An aria-live region for status announcements, visually present but subtle. */
+.live { font-size: var(--text-sm); color: var(--text-muted); min-height: 1.5em; }
