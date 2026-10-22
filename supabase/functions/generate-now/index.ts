@@ -37,6 +37,31 @@ interface Context {
   credentials: Credential[];
 }
 
+
+/**
+ * List the models the key can actually call and return a usable flash model
+ * (falling back to any generateContent-capable model). Avoids a 404 from
+ * guessing a model name the key does not have.
+ */
+async function resolveGeminiModel(apiKey: string): Promise<string> {
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+      { headers: { "x-goog-api-key": apiKey }, signal: AbortSignal.timeout(10000) },
+    );
+    if (!res.ok) return "gemini-flash-latest";
+    const data = await res.json();
+    const models = (data.models ?? []) as Array<{ name?: string; supportedGenerationMethods?: string[] }>;
+    const usable = models.filter((m) => (m.supportedGenerationMethods ?? []).includes("generateContent"));
+    const bad = /(thinking|vision|tts|image|embedding|aqa|learnlm|exp)/i;
+    const flash = usable.find((m) => /flash/i.test(m.name ?? "") && !bad.test(m.name ?? ""));
+    const chosen = (flash ?? usable.find((m) => !bad.test(m.name ?? "")) ?? usable[0])?.name;
+    return chosen ? chosen.replace(/^models\//, "") : "gemini-flash-latest";
+  } catch {
+    return "gemini-flash-latest";
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ ok: false, error: "method not allowed" }, 405);
@@ -92,11 +117,10 @@ Deno.serve(async (req) => {
           keyring, { orgId: ctx.org_id, credentialId: c.id },
           { ciphertext: b64(c.ciphertext), iv: b64(c.iv), keyVersion: c.key_version },
         );
-        // Pin Gemini to a lite model: gemini-flash-latest was returning 503
-        // UNAVAILABLE for everyone on the free tier, while the lite line has far
-        // more free capacity. The stored model is overridden only for this
-        // on-demand sample path.
-        const model = c.provider === "gemini" ? "gemini-2.0-flash" : c.model;
+        // Ask the key which models it can actually use, rather than guessing a
+        // name (which 404s if that model is not available to this key). Pick a
+        // flash model that supports generateContent.
+        const model = c.provider === "gemini" ? await resolveGeminiModel(key) : c.model;
         attempts.push({ provider: c.provider, model, apiKey: key });
       } catch { /* skip an undecryptable credential */ }
     }
