@@ -1,10 +1,18 @@
-name: Functions deploy (manual only)
+name: Functions deploy
 
-# Deploys an Edge Function to the development project. Like db-deploy, it is
-# manual-only and gated, but it carries no database password and applies no
-# migration — it only ships function code. Secrets the functions read
-# (MASTER_KEY_V1, GENERATE_TRIGGER_SECRET) are set in the Supabase dashboard,
-# never here and never in the repo.
+# Two ways in:
+#  - Manual (workflow_dispatch): pick a function, type "deploy", and a human
+#    approves the `development` environment. The careful path, for ad-hoc or
+#    out-of-band deploys of any function.
+#  - Automatic (push to main): when a merge changes a function's own code, or
+#    the shared packages/core it bundles, that function is deployed with no
+#    further action — the review already happened on the pull request. This
+#    path has no typed confirmation and no environment gate, so it is scoped to
+#    main only and to the function directories that actually changed.
+#
+# Either way: no database password, no migration — function code only. Secrets
+# the functions read (MASTER_KEY_V1, GENERATE_TRIGGER_SECRET) live in the
+# Supabase dashboard, never here and never in the repo.
 
 on:
   workflow_dispatch:
@@ -21,6 +29,11 @@ on:
         description: 'Type exactly: deploy'
         required: true
         type: string
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/functions/**'
+      - 'packages/core/**'
 
 permissions:
   contents: read
@@ -32,12 +45,14 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    # A GitHub Environment with a required reviewer — a human approves the run,
-    # same as db-deploy.
-    environment: development
+    # A manual run goes through the `development` environment (required
+    # reviewer). An automatic push to main deploys without that gate — the PR
+    # review is the gate — by resolving to no environment.
+    environment: ${{ github.event_name == 'workflow_dispatch' && 'development' || '' }}
 
     steps:
-      - name: Require typed confirmation
+      - name: Require typed confirmation (manual runs only)
+        if: github.event_name == 'workflow_dispatch'
         env:
           CONFIRM: ${{ inputs.confirm }}
         run: |
@@ -49,6 +64,9 @@ jobs:
           echo "Confirmation accepted."
 
       - uses: actions/checkout@v4
+        with:
+          # Need the previous commit so a push can diff what changed.
+          fetch-depth: 2
 
       - uses: supabase/setup-cli@v1
         with:
@@ -65,9 +83,57 @@ jobs:
           fi
           echo "Target fingerprint: ${PROJECT_REF:0:4}...${PROJECT_REF: -4}"
 
-      - name: Deploy the function
+      - name: Decide which functions to deploy
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_FN: ${{ inputs.function }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # Exactly the one the operator chose.
+            echo "functions=$INPUT_FN" >> "$GITHUB_OUTPUT"
+            echo "Manual: $INPUT_FN"
+            exit 0
+          fi
+
+          # Push: start from functions whose own index.ts changed.
+          changed="$(git diff --name-only HEAD^ HEAD || true)"
+          funcs=""
+          while IFS= read -r name; do
+            [ -n "$name" ] && funcs="$funcs $name"
+          done < <(printf '%s\n' "$changed" \
+            | grep -E '^supabase/functions/[^/]+/' \
+            | sed -E 's#^supabase/functions/([^/]+)/.*#\1#' \
+            | sort -u)
+
+          # If the shared core changed, every function bundles it — redeploy all.
+          if printf '%s\n' "$changed" | grep -qE '^packages/core/'; then
+            for d in supabase/functions/*/index.ts; do
+              [ -f "$d" ] || continue
+              funcs="$funcs $(basename "$(dirname "$d")")"
+            done
+          fi
+
+          # De-duplicate.
+          funcs="$(printf '%s\n' $funcs | sort -u | tr '\n' ' ')"
+          echo "functions=$funcs" >> "$GITHUB_OUTPUT"
+          echo "Push: changed functions ->$funcs"
+
+      - name: Deploy
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-          FUNCTION: ${{ inputs.function }}
-        run: supabase functions deploy "$FUNCTION" --project-ref "$PROJECT_REF"
+          FUNCTIONS: ${{ steps.pick.outputs.functions }}
+        run: |
+          set -euo pipefail
+          trimmed="$(printf '%s' "$FUNCTIONS" | tr -s ' ')"
+          if [ -z "${trimmed// /}" ]; then
+            echo "No function code changed in this push — nothing to deploy."
+            exit 0
+          fi
+          for fn in $FUNCTIONS; do
+            echo "::group::Deploying $fn"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+            echo "::endgroup::"
+          done
