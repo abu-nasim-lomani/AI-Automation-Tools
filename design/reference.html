@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Postplan Design Reference</title>
+<meta name="description" content="The visual foundation every Postplan screen is built from: tokens, dual-script typography, and the core components." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Bengali:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: var(--text-base);
+    line-height: var(--leading-latin);
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Every Bangla node gets the Bengali face and its taller leading (§2.2). */
+  [lang="bn"] { font-family: var(--font-bangla); line-height: var(--leading-bangla); }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: var(--space-8) var(--space-4); }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; margin-bottom: var(--space-8); }
+  h1 { font-size: var(--text-3xl); font-weight: var(--weight-semibold); margin: 0 0 var(--space-1); letter-spacing: -0.02em; }
+  h2 { font-size: var(--text-xl); font-weight: var(--weight-semibold); margin: var(--space-12) 0 var(--space-3); }
+  h3 { font-size: var(--text-base); font-weight: var(--weight-semibold); margin: var(--space-6) 0 var(--space-2); color: var(--text-muted); }
+  p { color: var(--text-muted); margin: 0 0 var(--space-3); max-width: 62ch; }
+  .lede { color: var(--text-subtle); font-size: var(--text-sm); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-6); box-shadow: var(--elev-1); margin-bottom: var(--space-4); }
+  .row { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: var(--space-2); }
+
+  /* Buttons */
+  .btn { font: inherit; font-weight: var(--weight-medium); border: 1px solid transparent; border-radius: var(--radius-md); padding: 10px var(--space-4); min-height: 44px; cursor: pointer; transition: background var(--motion-micro) var(--easing), box-shadow var(--motion-micro) var(--easing); }
+  .btn-primary { background: var(--primary); color: var(--primary-on); }
+  .btn-primary:hover { box-shadow: var(--elev-2); filter: brightness(1.05); }
+  .btn-primary:active { filter: brightness(0.95); }
+  .btn-ghost { background: transparent; color: var(--text); border-color: var(--border-strong); }
+  .btn-danger { background: var(--danger); color: var(--danger-on); }
+  .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+  .btn .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s 0.7s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+
+  /* Pills & badges — icon + text + colour, never colour alone (rule 6). */
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: var(--weight-medium); padding: 4px 10px; border-radius: 999px; border: 1px solid; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .pill-active { color: var(--success); background: var(--success-subtle); border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+  .pill-paused { color: var(--warning); background: var(--warning-subtle); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+  .pill-attention { color: var(--danger); background: var(--danger-subtle); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); font-weight: var(--weight-medium); padding: 3px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); }
+  .badge .ic { font-size: var(--text-xs); }
+  .b-published { color: var(--success); background: var(--success-subtle); border-color: color-mix(in srgb, var(--success) 25%, transparent); }
+  .b-failed { color: var(--text-subtle); background: var(--bg); }
+  .b-skipped { color: var(--text-subtle); background: var(--bg); }
+  .b-pending { color: var(--info); background: var(--info-subtle); border-color: color-mix(in srgb, var(--info) 25%, transparent); }
+  /* unresolved is NOT an error (rule 4): its own look + a decision affordance. */
+  .b-unresolved { color: var(--warning); background: var(--warning-subtle); border-color: color-mix(in srgb, var(--warning) 35%, transparent); font-weight: var(--weight-semibold); }
+  .b-unresolved a { color: inherit; }
+
+  /* Swatches */
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-3); }
+  .sw { border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+  .sw .chip { height: 48px; }
+  .sw .lbl { font-size: var(--text-xs); font-family: var(--font-mono); padding: 6px 8px; color: var(--text-subtle); }
+
+  /* Post preview — unmistakably a preview (rule 8). */
+  .preview { position: relative; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-raised); padding: var(--space-4); }
+  .preview::before { content: "PREVIEW — not a real post"; position: absolute; top: 10px; right: 10px; font-size: 10px; letter-spacing: 0.08em; font-weight: var(--weight-semibold); color: var(--warning); background: var(--warning-subtle); border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); padding: 2px 6px; border-radius: 4px; }
+  .fb-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .fb-av { width: 40px; height: 40px; border-radius: 50%; background: var(--primary-subtle); color: var(--primary); display: grid; place-items: center; font-weight: var(--weight-semibold); }
+
+  /* Secret input — masked, no reveal after save, no copy (rule 7). */
+  .field label { display: block; font-size: var(--text-sm); font-weight: var(--weight-medium); margin-bottom: 6px; }
+  .field input { font: inherit; width: 100%; padding: 10px var(--space-3); min-height: 44px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-family: var(--font-mono); }
+  .hint { font-size: var(--text-xs); color: var(--text-subtle); margin-top: 6px; }
+
+  /* Composer counter */
+  textarea.composer { font: inherit; width: 100%; min-height: 120px; padding: var(--space-3); border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface); color: var(--text); resize: vertical; }
+  .meters { display: flex; gap: var(--space-6); flex-wrap: wrap; margin-top: var(--space-3); font-size: var(--text-sm); }
+  .meter b { font-variant-numeric: tabular-nums; }
+  .meter .ok { color: var(--success); }
+  .meter .bad { color: var(--danger); }
+
+  .typetest { font-size: var(--text-xl); }
+  .typetest .mixed { font-size: var(--text-lg); }
+  .scale > * { margin: 0 0 var(--space-2); }
+
+  .note { font-size: var(--text-sm); color: var(--text-subtle); border-left: 3px solid var(--border-strong); padding-left: var(--space-3); }
+  footer { margin-top: var(--space-16); color: var(--text-subtle); font-size: var(--text-sm); }
+  @media (max-width: 480px) { .wrap { padding: var(--space-6) var(--space-4); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Postplan — design reference</h1>
+      <p class="lede">The visual foundation every screen is built from. Tokens, dual-script type, and the core components. Not a screen — a reference.</p>
+    </div>
+    <button class="btn btn-ghost" id="theme" aria-label="Toggle dark mode">◐ Theme</button>
+  </header>
+
+  <!-- ─── Typography test sheet (UI-1): look for a baseline jump or a font seam ─── -->
+  <h2>Dual-script typography — the rendering test</h2>
+  <p>Postplan's content is mostly Bangla with Latin mixed inline. This sheet is the test that decides the Bangla face (UI-1). Look for a baseline jump where scripts meet, and a font seam mid-word.</p>
+  <div class="card typetest">
+    <div class="stack">
+      <div><span class="lede">Conjuncts</span><br><span lang="bn">ক্ষ স্ত্র ঙ্গ র‍্য ত্ত্ব ক্ট ন্ধ ষ্ণ</span></div>
+      <div><span class="lede">Matras above & below</span><br><span lang="bn">কী কু কৃ কে কৈ কো কৌ কং কঁ</span></div>
+      <div><span class="lede">Bengali numerals</span><br><span lang="bn">০ ১ ২ ৩ ৪ ৫ ৬ ৭ ৮ ৯</span></div>
+      <div class="mixed"><span class="lede">Mixed run (watch the baseline)</span><br><span lang="bn">আজকের post-টি schedule করা হয়েছে — 3টি draft, 19:00-এ publish হবে।</span></div>
+    </div>
+  </div>
+
+  <h3>Type scale · 12 14 16 18 24 30 38</h3>
+  <div class="card scale">
+    <div style="font-size:var(--text-3xl);font-weight:600">Aa অ — 38</div>
+    <div style="font-size:var(--text-2xl);font-weight:600">Aa অ — 30</div>
+    <div style="font-size:var(--text-xl)">Aa অ — 24</div>
+    <div style="font-size:var(--text-lg)">Aa অ — 18</div>
+    <div style="font-size:var(--text-base)">Aa অ — 16 body</div>
+    <div style="font-size:var(--text-sm)">Aa অ — 14</div>
+    <div style="font-size:var(--text-xs)">Aa অ — 12</div>
+  </div>
+
+  <!-- ─── Colour ─── -->
+  <h2>Colour tokens</h2>
+  <p>Semantic, never raw. Each pairing is chosen for WCAG AA; UI-3 is a formal contrast pass on these values.</p>
+  <div class="card swatches" id="swatches"></div>
+
+  <!-- ─── The two most important components ─── -->
+  <h2>Automation status &amp; emergency stop</h2>
+  <p>The status pill sits in the header of every screen — the one thing a user must never be unsure of is whether the robot is posting. The stop is two clicks from anywhere and available to any member.</p>
+  <div class="card row" style="justify-content:space-between">
+    <div class="row">
+      <span class="pill pill-active"><span class="dot"></span>● Active</span>
+      <span class="pill pill-paused"><span class="dot"></span>‖ Paused</span>
+      <span class="pill pill-attention"><span class="dot"></span>▲ Needs attention</span>
+    </div>
+    <button class="btn btn-danger">■ Emergency stop</button>
+  </div>
+  <p class="note">Status is icon + text + colour, never colour alone — so it reads for colour-blind users and in greyscale.</p>
+
+  <!-- ─── Job badges: failed ≠ unresolved ─── -->
+  <h2>Job status — <code>failed</code> and <code>unresolved</code> never share a visual</h2>
+  <p><code>failed</code> means <em>no request was ever issued</em>. <code>unresolved</code> means <em>we do not know whether it published</em> — a request for a human decision, not an error, so it is never a red badge.</p>
+  <div class="card row">
+    <span class="badge b-pending"><span class="ic">◷</span> pending</span>
+    <span class="badge"><span class="ic">⇄</span> claimed</span>
+    <span class="badge b-pending"><span class="ic">🔍</span> needs verification</span>
+    <span class="badge b-published"><span class="ic">✓</span> published</span>
+    <span class="badge b-failed"><span class="ic">∅</span> failed — nothing sent</span>
+    <span class="badge b-skipped"><span class="ic">⤼</span> skipped</span>
+    <span class="badge b-unresolved"><span class="ic">？</span> unresolved — <a href="#">decide →</a></span>
+  </div>
+
+  <!-- ─── Post preview ─── -->
+  <h2>Post preview — always labelled</h2>
+  <p>Styled to resemble a Facebook post for honest fidelity, and marked a preview so it can never pass as real.</p>
+  <div class="card">
+    <div class="preview">
+      <div class="fb-head">
+        <div class="fb-av">MA</div>
+        <div><div style="font-weight:600;color:var(--text)">You Know MD Abu Nasim</div><div class="lede">Draft · would publish 19:00</div></div>
+      </div>
+      <div lang="bn">ধৈর্য একটি নীরব শক্তি। তাড়াহুড়ো নয়, ধারাবাহিকতাই দিনশেষে সবচেয়ে বড় পার্থক্য গড়ে দেয়। আজকের ছোট একটি পদক্ষেপ কালকের বড় ফলাফলের বীজ।</div>
+    </div>
+  </div>
+
+  <!-- ─── Secret input ─── -->
+  <h2>Secret input — masked, reveal-once, no copy</h2>
+  <div class="card field">
+    <label for="k">Gemini API key</label>
+    <input id="k" type="text" value="AIza…7f2c" readonly aria-describedby="kh" />
+    <div class="hint" id="kh">Stored and masked. There is nothing to reveal after saving — no screen ever shows a saved key again.</div>
+  </div>
+
+  <!-- ─── Composer counter — grapheme counting, live ─── -->
+  <h2>Composer — counts graphemes, never <code>.length</code></h2>
+  <p>A conjunct like <span lang="bn">ক্ষ</span> and a multi-code-point emoji each count as <b>one</b>, the way a reader sees them. Edit the text and watch the counts.</p>
+  <div class="card">
+    <textarea class="composer" id="composer" lang="bn" aria-label="Post composer">আজকের post-টি schedule করা হয়েছে। ক্ষ 😀</textarea>
+    <div class="meters">
+      <span class="meter">graphemes <b id="g">–</b> <span class="lede">/ 400–1400</span></span>
+      <span class="meter">naive .length <b id="n">–</b> <span class="lede">(wrong for Bangla)</span></span>
+      <span class="meter">Bangla ratio <b id="r">–</b> <span class="lede">target 0.85 ± 0.05</span></span>
+    </div>
+  </div>
+
+  <!-- ─── Button states ─── -->
+  <h2>States — a component is not done without all eight</h2>
+  <div class="card stack">
+    <div class="row">
+      <button class="btn btn-primary">Default</button>
+      <button class="btn btn-primary" style="filter:brightness(1.05);box-shadow:var(--elev-2)">Hover</button>
+      <button class="btn btn-primary" style="filter:brightness(0.95)">Active</button>
+      <button class="btn btn-primary" disabled>Disabled</button>
+      <button class="btn btn-primary"><span class="spin"></span>Loading</button>
+    </div>
+    <div class="note">Empty: “No posts yet — generate your first.” carries the next action, not an illustration.</div>
+    <div class="note" style="border-color:var(--danger);color:var(--danger)">Error: “Could not reach the AI provider. Your key is saved; we will retry at 02:30.” — what happened and what to do, never an upstream body.</div>
+    <div class="note" style="border-color:var(--success);color:var(--success)">Success: “Draft saved. 3 of 10 in your buffer.”</div>
+    <div class="note">Disabled explains why, adjacently: a greyed Publish reads “Approve the draft first.”</div>
+  </div>
+
+  <footer>
+    Tokens: <code>design/tokens.css</code>. Rules: <code>.claude/skills/saas-ui-standards</code>. Values: <code>docs/DESIGN_SYSTEM.md</code>.
+    Open: UI-1 (Bangla face), UI-3 (contrast pass), UI-4 (framework, ADR-004), UI-5 (dark mode in MVP).
+  </footer>
+</div>
+
+<script>
+  // Theme toggle — remembers the choice per viewer (a convenience, not shared state).
+  (function () {
+    var btn = document.getElementById("theme");
+    try { var t = localStorage.getItem("pp-theme"); if (t) document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+    btn.addEventListener("click", function () {
+      var cur = document.documentElement.getAttribute("data-theme");
+      var next = cur === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("pp-theme", next); } catch (e) {}
+    });
+  })();
+
+  // Colour swatches from the tokens actually in effect.
+  (function () {
+    var roles = ["--bg","--surface","--border","--text","--text-muted","--primary","--primary-subtle","--success","--warning","--danger","--info","--focus"];
+    var host = document.getElementById("swatches");
+    roles.forEach(function (r) {
+      var d = document.createElement("div"); d.className = "sw";
+      var c = document.createElement("div"); c.className = "chip"; c.style.background = "var(" + r + ")";
+      var l = document.createElement("div"); l.className = "lbl"; l.textContent = r;
+      d.appendChild(c); d.appendChild(l); host.appendChild(d);
+    });
+  })();
+
+  // Live grapheme counting — the same definition as packages/core/content/counting.ts.
+  (function () {
+    var segG = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    function graphemes(s) { var n = 0; for (var _ of segG.segment(s)) n++; return n; }
+    function banglaRatio(s) {
+      var letters = 0, bengali = 0;
+      for (var seg of segG.segment(s)) {
+        var cp = seg.segment.codePointAt(0); if (cp === undefined) continue;
+        var ch = String.fromCodePoint(cp);
+        if (!/\p{L}/u.test(ch)) continue;
+        letters++; if (cp >= 0x0980 && cp <= 0x09ff) bengali++;
+      }
+      return letters === 0 ? 0 : Math.round((bengali / letters) * 1000) / 1000;
+    }
+    var ta = document.getElementById("composer");
+    function update() {
+      var v = ta.value;
+      var g = graphemes(v);
+      document.getElementById("g").textContent = g;
+      var gEl = document.getElementById("g");
+      gEl.className = (g >= 400 && g <= 1400) ? "" : "";
+      document.getElementById("n").textContent = v.length;
+      var r = banglaRatio(v);
+      var rEl = document.getElementById("r");
+      rEl.textContent = r.toFixed(3);
+      rEl.className = (r >= 0.80 && r <= 0.90) ? "ok" : "bad";
+    }
+    ta.addEventListener("input", update); update();
+  })();
+</script>
+</body>
+</html>
