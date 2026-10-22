@@ -1,4 +1,5 @@
 import { supabase } from "./supabase.ts";
+import { invokeEdge } from "./invoke.ts";
 
 export interface Topic {
   id: string;
@@ -35,8 +36,5 @@ export interface SampleResult {
 
 /** Ask the generate-now function for one draft, on demand. */
 export async function generateSample(orgId: string): Promise<SampleResult> {
-  const { data, error } = await supabase!.functions.invoke("generate-now", { body: { org_id: orgId } });
-  if (error) throw error;
-  if (!data?.ok) throw new Error(data?.error ?? "could not generate");
-  return data as SampleResult;
+  return await invokeEdge<SampleResult>("generate-now", { org_id: orgId });
 }
