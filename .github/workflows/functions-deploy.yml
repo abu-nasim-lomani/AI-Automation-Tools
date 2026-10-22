@@ -1,0 +1,71 @@
+name: Functions deploy (manual only)
+
+# Deploys an Edge Function to the development project. Like db-deploy, it is
+# manual-only and gated, but it carries no database password and applies no
+# migration — it only ships function code. Secrets the functions read
+# (MASTER_KEY_V1, GENERATE_TRIGGER_SECRET) are set in the Supabase dashboard,
+# never here and never in the repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      function:
+        description: 'Function to deploy'
+        required: true
+        type: choice
+        options:
+          - generate
+      confirm:
+        description: 'Type exactly: deploy'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: functions-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    # A GitHub Environment with a required reviewer — a human approves the run,
+    # same as db-deploy.
+    environment: development
+
+    steps:
+      - name: Require typed confirmation
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "${CONFIRM:-}" != "deploy" ]; then
+            echo "::error::Confirmation not given. Expected exactly: deploy"
+            exit 1
+          fi
+          echo "Confirmation accepted."
+
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.121.0        # pinned, as in db-dry-run.yml
+
+      - name: Verify the target project before linking
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROJECT_REF:-}" ]; then
+            echo "::error::Secret SUPABASE_PROJECT_REF is not set."
+            exit 1
+          fi
+          echo "Target fingerprint: ${PROJECT_REF:0:4}...${PROJECT_REF: -4}"
+
+      - name: Deploy the function
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+          FUNCTION: ${{ inputs.function }}
+        run: supabase functions deploy "$FUNCTION" --project-ref "$PROJECT_REF"

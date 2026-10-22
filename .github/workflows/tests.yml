@@ -59,3 +59,19 @@ jobs:
           packages/core/providers/providers.test.ts
           packages/core/content/content.test.ts
           packages/core/content/generate.test.ts
+
+  functions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.8        # pinned: the version the handler type-checks against
+
+      # The generate handler has no runtime unit test (its logic is in
+      # packages/core, which is tested on Node). `deno check` is its guard: it
+      # resolves the real imports, including deno-postgres, and type-checks the
+      # whole graph, so a broken import or type fails CI before a deploy.
+      - name: Type-check the edge functions
+        run: deno check supabase/functions/generate/index.ts
